@@ -1,4 +1,10 @@
-const MAIN_SECTIONS = ["Dashboard", "Leads", "Viatges", "Analítica"];
+const SECTION_KEYS = Object.freeze({
+  Dashboard: "dashboard",
+  Leads: "leads",
+  Viatges: "trips",
+  Analítica: "analytics"
+});
+
 let currentSection = "Dashboard";
 
 function navButtons() {
@@ -9,13 +15,25 @@ function labelForButton(button) {
   return button.querySelector("span")?.textContent?.trim() || button.textContent.trim();
 }
 
+function normalizeNavigationButtons() {
+  navButtons().forEach((button) => {
+    const label = labelForButton(button);
+    const key = SECTION_KEYS[label];
+    if (key) button.dataset.navKey = key;
+  });
+}
+
 export function setActiveNavigation(label) {
-  if (!MAIN_SECTIONS.includes(label)) return;
+  const key = SECTION_KEYS[label];
+  if (!key) return;
+
   currentSection = label;
+  normalizeNavigationButtons();
+  document.body.dataset.activeNav = key;
 
   navButtons().forEach((button) => {
-    const isActive = labelForButton(button) === label;
-    button.classList.toggle("is-active", isActive);
+    const isActive = button.dataset.navKey === key;
+    button.classList.remove("is-active");
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
 }
@@ -24,7 +42,7 @@ function sectionFromClick(target) {
   const navButton = target.closest(".sidebar-nav__item");
   if (navButton && !navButton.disabled) {
     const label = labelForButton(navButton);
-    if (MAIN_SECTIONS.includes(label)) return label;
+    if (SECTION_KEYS[label]) return label;
   }
 
   if (target.closest("[data-back-dashboard]")) return "Dashboard";
