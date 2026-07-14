@@ -5,61 +5,99 @@ const PAGE_NAV = [
   { classes: ["daily-dashboard", "dashboard-view"], label: "Dashboard" }
 ];
 
+const VALID_LABELS = new Set(["Dashboard", "Leads", "Viatges", "Analítica"]);
+let currentLabel = "Dashboard";
+let explicitNavigationUntil = 0;
+
 function navButtons() {
   return [...document.querySelectorAll(".sidebar-nav__item")];
 }
 
 function labelForButton(button) {
-  return button.querySelector("span")?.textContent?.trim() || button.textContent.trim();
+  return button.querySelector(":scope > span")?.textContent?.trim() || button.textContent.trim();
 }
 
-export function setActiveNavigation(label) {
+function prepareNavigationButtons() {
   navButtons().forEach((button) => {
-    button.classList.toggle("is-active", labelForButton(button) === label);
+    const label = labelForButton(button);
+    if (VALID_LABELS.has(label)) button.dataset.navLabel = label;
+  });
+}
+
+export function setActiveNavigation(label, { explicit = false } = {}) {
+  if (!VALID_LABELS.has(label)) return;
+  currentLabel = label;
+  if (explicit) explicitNavigationUntil = Date.now() + 1200;
+
+  prepareNavigationButtons();
+  navButtons().forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.navLabel === label);
   });
 }
 
 function visiblePageElement() {
-  const content = document.querySelector(".app-content");
-  if (!content) return null;
-  return content.firstElementChild;
+  return document.querySelector(".app-content")?.firstElementChild || null;
 }
 
-function syncFromVisiblePage() {
+function labelFromVisiblePage() {
   const page = visiblePageElement();
-  if (!page) return;
+  if (!page) return "";
 
   const match = PAGE_NAV.find((item) =>
     item.classes.some((className) => page.classList.contains(className))
   );
+  return match?.label || "";
+}
 
-  if (match) setActiveNavigation(match.label);
+function syncFromVisiblePage() {
+  prepareNavigationButtons();
+  const visibleLabel = labelFromVisiblePage();
+
+  if (visibleLabel && Date.now() >= explicitNavigationUntil) {
+    currentLabel = visibleLabel;
+  }
+  setActiveNavigation(currentLabel);
 }
 
 function scheduleSync() {
   requestAnimationFrame(() => requestAnimationFrame(syncFromVisiblePage));
 }
 
-document.addEventListener("click", (event) => {
-  const button = event.target.closest(".sidebar-nav__item");
-  if (!button || button.disabled) return;
-
-  const label = labelForButton(button);
-  if (["Dashboard", "Leads", "Viatges", "Analítica"].includes(label)) {
-    setActiveNavigation(label);
-    scheduleSync();
+function labelFromAction(target) {
+  const navButton = target.closest?.(".sidebar-nav__item");
+  if (navButton && !navButton.disabled) {
+    const label = labelForButton(navButton);
+    if (VALID_LABELS.has(label)) return label;
   }
+
+  if (target.closest?.("[data-dashboard-lead], [data-dashboard-trip], [data-lead-id], [data-back-to-leads]")) return "Leads";
+  if (target.closest?.("[data-back-dashboard]")) return "Dashboard";
+  return "";
+}
+
+document.addEventListener("click", (event) => {
+  const label = labelFromAction(event.target);
+  if (!label) return;
+  setActiveNavigation(label, { explicit: true });
+  scheduleSync();
 }, true);
 
 const observer = new MutationObserver((mutations) => {
   const contentChanged = mutations.some((mutation) =>
     mutation.target.matches?.(".app-content") || mutation.target.closest?.(".app-content")
   );
-  if (contentChanged) scheduleSync();
+  const sidebarChanged = mutations.some((mutation) =>
+    mutation.target.matches?.(".sidebar-nav") || mutation.target.closest?.(".sidebar-nav")
+  );
+  if (contentChanged || sidebarChanged) scheduleSync();
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
 window.addEventListener("travelflow:navigation", (event) => {
-  if (event.detail?.label) setActiveNavigation(event.detail.label);
+  if (event.detail?.label) setActiveNavigation(event.detail.label, { explicit: true });
   scheduleSync();
 });
+
+prepareNavigationButtons();
+scheduleSync();
