@@ -87,15 +87,18 @@ export async function seedInitialTrips() {
   return missingTrips.length;
 }
 
-export async function createTripTag({ name, startDate, endDate, closingDate = "", imageUrl = "" }) {
+export async function createTripTag({ name, startDate = "", endDate = "", closingDate = "", imageUrl = "" }) {
   const currentUser = getCurrentUser();
   const cleanName = name?.trim();
   if (!currentUser) throw new Error("AUTH_REQUIRED");
   if (!cleanName) throw new Error("TRIP_NAME_REQUIRED");
-  if (!startDate) throw new Error("TRIP_START_REQUIRED");
-  if (!endDate) throw new Error("TRIP_END_REQUIRED");
-  if (endDate < startDate) throw new Error("TRIP_DATE_ORDER");
+  if ((startDate && !endDate) || (!startDate && endDate)) throw new Error("TRIP_DATES_INCOMPLETE");
+  if (startDate && endDate && endDate < startDate) throw new Error("TRIP_DATE_ORDER");
+  if (closingDate && !startDate) throw new Error("TRIP_CLOSING_REQUIRES_START");
   if (closingDate && closingDate > startDate) throw new Error("TRIP_CLOSING_ORDER");
+
+  const datesPending = !startDate || !endDate;
+  const inferredYear = Number(cleanName.slice(0, 4)) || (startDate ? new Date(`${startDate}T12:00:00`).getFullYear() : null);
   const trip = {
     name: cleanName,
     nameSearch: cleanName.toLowerCase(),
@@ -103,8 +106,8 @@ export async function createTripTag({ name, startDate, endDate, closingDate = ""
     endDate,
     closingDate,
     imageUrl: imageUrl?.trim() || imageForTrip(cleanName),
-    year: Number(cleanName.slice(0, 4)) || new Date(startDate).getFullYear(),
-    datesPending: false,
+    year: inferredYear,
+    datesPending,
     active: true,
     createdBy: currentUser.uid,
     updatedBy: currentUser.uid,
@@ -128,6 +131,7 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
     endDate,
     closingDate,
     ...(imageUrl?.trim() ? { imageUrl: imageUrl.trim() } : {}),
+    year: new Date(`${startDate}T12:00:00`).getFullYear(),
     datesPending: false,
     updatedBy: currentUser.uid,
     updatedAt: serverTimestamp()
@@ -141,6 +145,8 @@ export function getTripErrorMessage(error) {
     TRIP_NAME_REQUIRED: "Escriu el nom de l'etiqueta del viatge.",
     TRIP_START_REQUIRED: "Indica la data d'inici del viatge.",
     TRIP_END_REQUIRED: "Indica la data de finalització del viatge.",
+    TRIP_DATES_INCOMPLETE: "Indica les dues dates o deixa-les totes dues pendents.",
+    TRIP_CLOSING_REQUIRES_START: "Per indicar el tancament comercial, primer cal informar la data de sortida.",
     TRIP_DATE_ORDER: "La data de finalització no pot ser anterior a la d'inici.",
     TRIP_CLOSING_ORDER: "La data de tancament no pot ser posterior a la sortida.",
     "permission-denied": "No tens permís per gestionar aquestes etiquetes de viatge."
