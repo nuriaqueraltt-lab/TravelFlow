@@ -1,8 +1,8 @@
 const PAGE_NAV = [
-  { selector: ".daily-dashboard, .dashboard-view", label: "Dashboard" },
-  { selector: ".leads-page, .lead-detail-page, .trip-leads-page", label: "Leads" },
-  { selector: ".trips-management-page", label: "Viatges" },
-  { selector: ".analytics-page", label: "Analítica" }
+  { classes: ["analytics-page"], label: "Analítica" },
+  { classes: ["trips-management-page"], label: "Viatges" },
+  { classes: ["leads-page", "lead-detail-page", "trip-leads-page"], label: "Leads" },
+  { classes: ["daily-dashboard", "dashboard-view"], label: "Dashboard" }
 ];
 
 function navButtons() {
@@ -19,18 +19,47 @@ export function setActiveNavigation(label) {
   });
 }
 
+function visiblePageElement() {
+  const content = document.querySelector(".app-content");
+  if (!content) return null;
+  return content.firstElementChild;
+}
+
 function syncFromVisiblePage() {
-  const match = PAGE_NAV.find((item) => document.querySelector(`.app-content ${item.selector}`));
+  const page = visiblePageElement();
+  if (!page) return;
+
+  const match = PAGE_NAV.find((item) =>
+    item.classes.some((className) => page.classList.contains(className))
+  );
+
   if (match) setActiveNavigation(match.label);
+}
+
+function scheduleSync() {
+  requestAnimationFrame(() => requestAnimationFrame(syncFromVisiblePage));
 }
 
 document.addEventListener("click", (event) => {
   const button = event.target.closest(".sidebar-nav__item");
   if (!button || button.disabled) return;
+
   const label = labelForButton(button);
-  if (["Dashboard", "Leads", "Viatges", "Analítica"].includes(label)) setActiveNavigation(label);
+  if (["Dashboard", "Leads", "Viatges", "Analítica"].includes(label)) {
+    setActiveNavigation(label);
+    scheduleSync();
+  }
 }, true);
 
-const observer = new MutationObserver(() => requestAnimationFrame(syncFromVisiblePage));
+const observer = new MutationObserver((mutations) => {
+  const contentChanged = mutations.some((mutation) =>
+    mutation.target.matches?.(".app-content") || mutation.target.closest?.(".app-content")
+  );
+  if (contentChanged) scheduleSync();
+});
+
 observer.observe(document.body, { childList: true, subtree: true });
-window.addEventListener("travelflow:navigation", (event) => setActiveNavigation(event.detail?.label));
+window.addEventListener("travelflow:navigation", (event) => {
+  if (event.detail?.label) setActiveNavigation(event.detail.label);
+  scheduleSync();
+});
