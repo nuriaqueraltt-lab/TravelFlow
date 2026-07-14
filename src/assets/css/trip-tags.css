@@ -1,0 +1,106 @@
+.trip-interest-field {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.trip-interest-field__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.trip-interest-field__heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.trip-interest-field__heading > div > span {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.trip-interest-field__heading small,
+.trip-tag-option small,
+.trip-tags-empty {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.trip-tag-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.trip-tag-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 58px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  cursor: pointer;
+}
+
+.trip-tag-option:has(input:checked) {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-050);
+}
+
+.trip-tag-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-brand-700);
+}
+
+.trip-tag-option span,
+.trip-tag-option strong,
+.trip-tag-option small {
+  display: block;
+}
+
+.trip-tag-create {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr auto;
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-brand-300);
+  border-radius: var(--radius-lg);
+  background: var(--color-brand-050);
+}
+
+.trip-tag-create[hidden] {
+  display: none;
+}
+
+.trip-tag-create__message {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.trip-tags-empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .trip-tag-options,
+  .trip-tag-create {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-interest-field__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
