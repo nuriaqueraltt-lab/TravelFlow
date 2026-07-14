@@ -6,13 +6,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function currentUserPath() {
+      return userPath(request.auth.uid);
+    }
+
     function userProfile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return get(currentUserPath());
     }
 
     function hasActiveProfile() {
       return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && exists(currentUserPath())
         && userProfile().data.active == true
         && userProfile().data.role in ['ADMIN', 'COMERCIAL'];
     }
@@ -25,6 +33,10 @@ service cloud.firestore {
       return hasActiveProfile() && userProfile().data.role == 'COMERCIAL';
     }
 
+    function isStaff() {
+      return isAdmin() || isCommercial();
+    }
+
     function isOwnUser(userId) {
       return signedIn() && request.auth.uid == userId;
     }
@@ -32,40 +44,83 @@ service cloud.firestore {
     function isInitialAdminBootstrap(userId) {
       return isOwnUser(userId)
         && request.auth.token.email == 'nuria.queraltt@gmail.com'
+        && request.resource.data.email == 'nuria.queraltt@gmail.com'
         && request.resource.data.role == 'ADMIN'
         && request.resource.data.active == true;
     }
 
+    function validUserRole() {
+      return request.resource.data.role in ['ADMIN', 'COMERCIAL'];
+    }
+
+    function createdByCurrentUser() {
+      return request.resource.data.createdBy == request.auth.uid;
+    }
+
     match /users/{userId} {
-      allow read: if isOwnUser(userId) || isAdmin();
-      allow create: if isAdmin() || isInitialAdminBootstrap(userId);
-      allow update: if isAdmin();
+      allow get: if isOwnUser(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if (isAdmin() && validUserRole()) || isInitialAdminBootstrap(userId);
+      allow update: if isAdmin() && validUserRole();
       allow delete: if false;
     }
 
     match /leads/{leadId} {
-      allow read, create, update: if hasActiveProfile();
+      allow read: if isStaff();
+
+      allow create: if isStaff()
+        && createdByCurrentUser()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.active == true;
+
+      allow update: if isAdmin()
+        || (isCommercial()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.active == resource.data.active);
+
       allow delete: if false;
     }
 
     match /activities/{activityId} {
-      allow read, create: if hasActiveProfile();
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && createdByCurrentUser()
+        && request.resource.data.leadId is string;
       allow update, delete: if false;
     }
 
     match /tasks/{taskId} {
-      allow read, create, update: if hasActiveProfile();
+      allow read: if isStaff();
+
+      allow create: if isStaff()
+        && createdByCurrentUser()
+        && request.resource.data.leadId is string;
+
+      allow update: if isAdmin()
+        || (isCommercial()
+          && request.resource.data.leadId == resource.data.leadId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.type == resource.data.type);
+
       allow delete: if false;
     }
 
     match /trips/{tripId} {
-      allow read: if hasActiveProfile();
+      allow read: if isStaff();
       allow create, update: if isAdmin();
       allow delete: if false;
     }
 
     match /notifications/{notificationId} {
-      allow read, create, update: if hasActiveProfile();
+      allow read: if isStaff();
+      allow create: if isStaff() && createdByCurrentUser();
+      allow update: if isAdmin()
+        || (isCommercial()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt);
       allow delete: if false;
     }
 
