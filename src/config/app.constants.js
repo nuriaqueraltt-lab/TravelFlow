@@ -38,18 +38,8 @@ export const LEAD_SOURCES = Object.freeze({
   OTHER: "OTHER"
 });
 
-export const LEAD_PRIORITIES = Object.freeze({
-  LOW: "LOW",
-  NORMAL: "NORMAL",
-  HIGH: "HIGH",
-  URGENT: "URGENT"
-});
-
-export const LEAD_TEMPERATURES = Object.freeze({
-  COLD: "COLD",
-  WARM: "WARM",
-  HOT: "HOT"
-});
+export const LEAD_PRIORITIES = Object.freeze({ LOW: "LOW", NORMAL: "NORMAL", HIGH: "HIGH", URGENT: "URGENT" });
+export const LEAD_TEMPERATURES = Object.freeze({ COLD: "COLD", WARM: "WARM", HOT: "HOT" });
 
 export const LOST_REASONS = Object.freeze({
   NO_RESPONSE: "NO_RESPONSE",
@@ -72,26 +62,19 @@ export const ACTIVITY_TYPES = Object.freeze({
   NEXT_ACTION_SET: "NEXT_ACTION_SET",
   TASK_COMPLETED: "TASK_COMPLETED",
   TRIP_CHANGED: "TRIP_CHANGED",
+  TRIP_CLOSED: "TRIP_CLOSED",
   BOOKING_CONFIRMED: "BOOKING_CONFIRMED",
   LEAD_LOST: "LEAD_LOST"
 });
 
-export const TASK_STATUSES = Object.freeze({
-  PENDING: "PENDING",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED"
-});
+export const TASK_STATUSES = Object.freeze({ PENDING: "PENDING", COMPLETED: "COMPLETED", CANCELLED: "CANCELLED" });
 
 export const TASK_TYPES = Object.freeze({
   FIRST_FOLLOW_UP: "FIRST_FOLLOW_UP",
   SECOND_FOLLOW_UP: "SECOND_FOLLOW_UP",
   FINAL_REVIEW: "FINAL_REVIEW",
-  MANUAL: "MANUAL"
+  MANUAL: "MANUAL",
+  TRIP_CLOSED: "TRIP_CLOSED"
 });
 
-export const FOLLOW_UP_DEFAULTS = Object.freeze({
-  FIRST_DAYS: 3,
-  SECOND_DAYS: 3,
-  FINAL_REVIEW_DAYS: 7,
-  MAX_NO_RESPONSE: 2
-});
+export const FOLLOW_UP_DEFAULTS = Object.freeze({ FIRST_DAYS: 3, SECOND_DAYS: 3, FINAL_REVIEW_DAYS: 7, MAX_NO_RESPONSE: 2 });
