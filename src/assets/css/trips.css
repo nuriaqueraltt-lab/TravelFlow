@@ -113,7 +113,7 @@
   display: grid;
   align-items: center;
   justify-items: center;
-  padding: clamp(12px, 3vh, 28px);
+  padding: clamp(20px, 4vw, 56px);
   overflow: hidden;
 }
 
@@ -125,33 +125,39 @@
 }
 
 .trip-date-panel {
+  --trip-panel-padding-x: clamp(2rem, 5vw, 3.75rem);
+  --trip-panel-padding-y: clamp(1.75rem, 4vw, 3rem);
   position: relative;
   z-index: 1;
-  width: min(620px, 100%);
-  max-height: calc(100vh - clamp(24px, 6vh, 56px));
+  width: min(760px, calc(100vw - 96px));
+  max-height: calc(100vh - clamp(40px, 8vh, 96px));
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: clamp(1.25rem, 3vw, var(--space-7));
+  padding: var(--trip-panel-padding-y) var(--trip-panel-padding-x);
   border-radius: var(--radius-xl);
   background: var(--color-white);
   box-shadow: var(--shadow-lg);
 }
 
 .trip-date-panel h2 {
-  margin: var(--space-2) 0 var(--space-5);
+  margin: var(--space-2) 0 var(--space-6);
 }
 
 .trip-date-panel form {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .trip-date-panel input {
   width: 100%;
-  min-height: 44px;
-  padding: 0 var(--space-3);
+  min-height: 48px;
+  padding: 0 var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+.trip-date-panel .form-field {
+  gap: var(--space-2);
 }
 
 .trip-date-panel .form-field small {
@@ -161,10 +167,10 @@
 
 .trip-date-panel .quick-lead-form__actions {
   position: sticky;
-  bottom: calc(-1 * clamp(1.25rem, 3vw, var(--space-7)));
+  bottom: calc(-1 * var(--trip-panel-padding-y));
   z-index: 2;
-  margin: var(--space-2) calc(-1 * clamp(1.25rem, 3vw, var(--space-7))) calc(-1 * clamp(1.25rem, 3vw, var(--space-7)));
-  padding: var(--space-4) clamp(1.25rem, 3vw, var(--space-7));
+  margin: var(--space-3) calc(-1 * var(--trip-panel-padding-x)) calc(-1 * var(--trip-panel-padding-y));
+  padding: var(--space-5) var(--trip-panel-padding-x);
   border-top: 1px solid var(--color-border);
   background: rgba(255, 255, 255, .96);
   backdrop-filter: blur(12px);
@@ -175,8 +181,8 @@
   top: 0;
   z-index: 3;
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   margin-left: auto;
   margin-bottom: calc(-1 * var(--space-5));
   place-items: center;
@@ -209,6 +215,11 @@ body:has(.trip-date-modal) {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .trip-date-panel {
+    width: min(680px, calc(100vw - 40px));
+    --trip-panel-padding-x: clamp(1.5rem, 5vw, 2.5rem);
+  }
 }
 
 @media (max-width: 640px) {
@@ -220,6 +231,8 @@ body:has(.trip-date-modal) {
   .trip-date-panel {
     width: 100%;
     max-height: 92vh;
+    --trip-panel-padding-x: 1.25rem;
+    --trip-panel-padding-y: 1.5rem;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   }
 
