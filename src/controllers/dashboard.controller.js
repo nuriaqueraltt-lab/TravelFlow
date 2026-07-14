@@ -102,7 +102,7 @@ window.addEventListener("travelflow:tasks-updated", () => {
   if (document.querySelector(".daily-dashboard")) showDailyDashboard();
 });
 const shellObserver = new MutationObserver(() => {
-  if (document.querySelector(".app-shell") && !document.querySelector(".app-content > *")) {
+  if (document.querySelector(".app-shell") && !document.querySelector(".daily-dashboard")) {
     shellObserver.disconnect();
     showDailyDashboard();
   }
