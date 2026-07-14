@@ -44,6 +44,7 @@ function formatDate(value, withTime = false) {
 }
 function initials(name = "") { return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "FV"; }
 function escapeHtml(value = "") { return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
+function normalizeText(value = "") { return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
 function loading() { return `<section class="leads-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant...</p></div></section>`; }
 function whatsappNumber(phone = "") { let digits = String(phone).replace(/\D/g, ""); if (!digits) return ""; if (digits.startsWith("00")) digits = digits.slice(2); if (digits.length === 9) digits = `34${digits}`; return digits; }
 function instagramUrl(value = "") { const clean = String(value).trim(); if (!clean) return ""; if (/^https?:\/\//i.test(clean)) return clean; return `https://www.instagram.com/${clean.replace(/^@/, "")}/`; }
@@ -77,7 +78,11 @@ function renderTimeline(activities, tasks) {
 
 function renderTripOptions(selectedIds = []) {
   const selected = new Set(selectedIds || []);
-  return tripsCache.map((trip) => `<label class="lead-edit-trip"><input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "checked" : ""}><span>${escapeHtml(trip.name)}</span></label>`).join("");
+  return tripsCache.map((trip) => `<label class="lead-edit-trip" data-trip-option><input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "checked" : ""}><span>${escapeHtml(trip.name)}</span></label>`).join("");
+}
+
+function renderTripSearch() {
+  return `<label class="trip-tag-search"><span class="trip-tag-search__label">Buscar etiqueta</span><span class="trip-tag-search__control"><span aria-hidden="true">⌕</span><input type="search" placeholder="Escriu el nom del viatge..." autocomplete="off" data-trip-tag-search /></span></label><p class="trip-tag-search__empty" data-trip-tag-search-empty hidden>No hi ha cap etiqueta que coincideixi amb la cerca.</p>`;
 }
 
 function currentEntryPreset(lead) {
@@ -91,7 +96,7 @@ function renderEntryOptions(lead) {
 }
 
 function renderEditForm(lead) {
-  return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend><div>${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`;
+  return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend>${renderTripSearch()}<div class="trip-tag-options-list">${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`;
 }
 
 function renderExpiredLeadBanner(lead, tasks) {
@@ -136,7 +141,29 @@ export async function showLeadsView() {
   }
 }
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
-function filterRows() { const search = document.querySelector("#leadsSearch")?.value.toLowerCase().trim() || ""; const channel = document.querySelector("#leadsChannelFilter")?.value || ""; const filtered = leadsCache.filter((lead) => (!channel || lead.channel === channel) && (!search || [lead.fullName, lead.phone, lead.email, lead.instagramHandle, lead.interest, ...(lead.tripLabels || [])].join(" ").toLowerCase().includes(search))); document.querySelector("#leadsRows").innerHTML = renderRows(filtered); document.querySelector("#leadsCount").textContent = filtered.length; }
+
+function filterRows() {
+  const search = normalizeText(document.querySelector("#leadsSearch")?.value || "");
+  const channel = document.querySelector("#leadsChannelFilter")?.value || "";
+  const filtered = leadsCache.filter((lead) => (!channel || lead.channel === channel) && (!search || normalizeText([lead.fullName, lead.phone, lead.email, lead.instagramHandle, lead.interest, ...(lead.tripLabels || [])].join(" ")).includes(search)));
+  document.querySelector("#leadsRows").innerHTML = renderRows(filtered);
+  document.querySelector("#leadsCount").textContent = filtered.length;
+}
+
+function filterEditTripOptions(searchInput) {
+  const fieldset = searchInput.closest(".lead-edit-trips");
+  if (!fieldset) return;
+  const query = normalizeText(searchInput.value);
+  const options = [...fieldset.querySelectorAll("[data-trip-option]")];
+  let visible = 0;
+  options.forEach((option) => {
+    const matches = !query || normalizeText(option.textContent).includes(query);
+    option.hidden = !matches;
+    if (matches) visible += 1;
+  });
+  const empty = fieldset.querySelector("[data-trip-tag-search-empty]");
+  if (empty) empty.hidden = visible > 0;
+}
 
 async function runQuickAction(action) {
   const lead = await getLeadById(currentLeadId);
@@ -162,7 +189,10 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-cancel-edit]")) { document.querySelector("#leadEditPanel").innerHTML = ""; return; }
   const action = event.target.closest("[data-action]"); if (action) runQuickAction(action.dataset.action);
 });
-document.addEventListener("input", (event) => { if (event.target.id === "leadsSearch") filterRows(); });
+document.addEventListener("input", (event) => {
+  if (event.target.id === "leadsSearch") filterRows();
+  if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target);
+});
 document.addEventListener("change", (event) => { if (event.target.id === "leadsChannelFilter") filterRows(); });
 document.addEventListener("submit", async (event) => {
   const formType = event.target.dataset.form; if (!formType) return; event.preventDefault();
