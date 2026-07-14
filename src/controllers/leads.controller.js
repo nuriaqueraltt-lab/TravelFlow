@@ -1,5 +1,7 @@
 import { getLeadActivities, getLeadById, getLeadErrorMessage, getLeads, updateLead } from "../services/lead.service.js";
+import { updateLeadEntryChannel } from "../services/lead-channel.service.js";
 import { getTrips } from "../services/trip.service.js";
+import { LEAD_CHANNELS, LEAD_SOURCES } from "../config/app.constants.js";
 import {
   addExpiredLeadToNextYear,
   declineExpiredLeadNextYear,
@@ -20,6 +22,16 @@ import {
 const CHANNEL_LABELS = { WEB: "Web", WHATSAPP: "WhatsApp", INSTAGRAM: "Instagram", FACEBOOK: "Facebook", EMAIL: "Email", PHONE: "Telèfon", OTHER: "Altres" };
 const STATUS_LABELS = { NEW: "Nou", INFO_SENT: "Informació enviada", FOLLOW_UP: "En seguiment", REPLIED: "Ha contestat", PENDING_DECISION: "Pendent de decisió", BOOKING_CONFIRMED: "Reserva confirmada", CONTACT_LATER: "Contactar més endavant", LOST: "Perdut" };
 const LOST_LABELS = { NO_RESPONSE: "Sense resposta", PRICE: "Preu", DATES: "Dates", HEALTH: "Salut", NO_HOLIDAYS: "No té vacances", BOOKED_ELSEWHERE: "Viatja amb una altra agència", DESTINATION: "Destinació no adequada", OTHER: "Altres" };
+const ENTRY_PRESETS = {
+  WEB_FORM: { label: "Formulari web", channel: LEAD_CHANNELS.WEB, source: LEAD_SOURCES.WEBSITE_FORM },
+  GOOGLE_ADS: { label: "Google Ads", channel: LEAD_CHANNELS.WEB, source: LEAD_SOURCES.GOOGLE_ADS },
+  WHATSAPP: { label: "WhatsApp", channel: LEAD_CHANNELS.WHATSAPP, source: LEAD_SOURCES.WHATSAPP },
+  INSTAGRAM: { label: "Instagram", channel: LEAD_CHANNELS.INSTAGRAM, source: LEAD_SOURCES.INSTAGRAM_ORGANIC },
+  FACEBOOK: { label: "Facebook", channel: LEAD_CHANNELS.FACEBOOK, source: LEAD_SOURCES.FACEBOOK_ORGANIC },
+  REFERRAL: { label: "Recomanació", channel: LEAD_CHANNELS.OTHER, source: LEAD_SOURCES.REFERRAL },
+  RETURNING_CUSTOMER: { label: "Clienta repetidora", channel: LEAD_CHANNELS.OTHER, source: LEAD_SOURCES.RETURNING_CUSTOMER },
+  OTHER: { label: "Altres", channel: LEAD_CHANNELS.OTHER, source: LEAD_SOURCES.OTHER }
+};
 let leadsCache = [];
 let currentLeadId = null;
 let tripsCache = [];
@@ -68,8 +80,18 @@ function renderTripOptions(selectedIds = []) {
   return tripsCache.map((trip) => `<label class="lead-edit-trip"><input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "checked" : ""}><span>${escapeHtml(trip.name)}</span></label>`).join("");
 }
 
+function currentEntryPreset(lead) {
+  if (lead.entryPreset && ENTRY_PRESETS[lead.entryPreset]) return lead.entryPreset;
+  return Object.entries(ENTRY_PRESETS).find(([, preset]) => preset.channel === lead.channel && preset.source === lead.source)?.[0] || "OTHER";
+}
+
+function renderEntryOptions(lead) {
+  const selected = currentEntryPreset(lead);
+  return Object.entries(ENTRY_PRESETS).map(([value, preset]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${preset.label}</option>`).join("");
+}
+
 function renderEditForm(lead) {
-  return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend><div>${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`;
+  return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend><div>${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`;
 }
 
 function renderExpiredLeadBanner(lead, tasks) {
@@ -155,6 +177,8 @@ document.addEventListener("submit", async (event) => {
       data.tripIds = JSON.stringify(selected.map((input) => input.value));
       data.tripLabels = JSON.stringify(selected.map((input) => input.dataset.tripLabel));
       await updateLead(currentLeadId, data);
+      const preset = ENTRY_PRESETS[data.entryPreset] || ENTRY_PRESETS.OTHER;
+      await updateLeadEntryChannel(currentLeadId, { ...preset, entryPreset: data.entryPreset || "OTHER", entryLabel: preset.label });
     }
     await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : formType === "next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error)); }
