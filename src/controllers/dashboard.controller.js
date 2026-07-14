@@ -1,6 +1,7 @@
 import { getOpenTasks } from "../services/workflow.service.js";
 import { getTrips } from "../services/trip.service.js";
 import { getLeads } from "../services/lead.service.js";
+import { importLegacyLeadsOnce } from "../services/legacy-import.service.js";
 import { showLeadDetail, showLeadsForTrip } from "./leads.controller.js";
 
 function root() { return document.querySelector(".app-content"); }
@@ -37,8 +38,14 @@ function renderDashboard(tasks, trips, leads) {
 export async function showDailyDashboard() {
   if (!root()) return;
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
-  try { const [tasks, trips, leads] = await Promise.all([getOpenTasks(), getTrips(), getLeads()]); root().innerHTML = renderDashboard(tasks, trips, leads); }
-  catch { root().innerHTML = `<div class="leads-error">No s'ha pogut carregar el Dashboard.</div>`; }
+  try {
+    await importLegacyLeadsOnce();
+    const [tasks, trips, leads] = await Promise.all([getOpenTasks(), getTrips(), getLeads()]);
+    root().innerHTML = renderDashboard(tasks, trips, leads);
+  } catch (error) {
+    console.error("No s'ha pogut preparar el Dashboard:", error);
+    root().innerHTML = `<div class="leads-error">No s'ha pogut carregar el Dashboard.</div>`;
+  }
 }
 
 document.addEventListener("click", (event) => {
