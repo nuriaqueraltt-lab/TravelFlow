@@ -1,0 +1,105 @@
+.sidebar-user {
+  position: relative;
+}
+
+.sidebar-user > button[data-user-menu-toggle],
+.topbar-profile[data-user-menu-toggle] {
+  cursor: pointer;
+}
+
+.sidebar-user > button[data-user-menu-toggle]:focus-visible,
+.topbar-profile[data-user-menu-toggle]:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline-offset: 3px;
+}
+
+.topbar-profile[data-user-menu-toggle] {
+  padding: 4px 8px 4px 4px;
+  border-radius: 14px;
+  transition: background var(--transition-fast);
+}
+
+.topbar-profile[data-user-menu-toggle]:hover,
+.topbar-profile[data-user-menu-toggle][aria-expanded="true"] {
+  background: var(--color-white);
+}
+
+.user-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  z-index: 80;
+  width: min(290px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  color: var(--color-text-primary);
+  box-shadow: 0 18px 48px rgba(24, 38, 31, 0.22);
+}
+
+.user-menu[hidden] {
+  display: none !important;
+}
+
+.user-menu__identity {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.user-menu__identity strong {
+  font-size: var(--font-size-md);
+}
+
+.user-menu__identity span {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.user-menu__identity small {
+  width: fit-content;
+  margin-top: var(--space-2);
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-100);
+  color: var(--color-brand-800);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.user-menu__logout {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-5);
+  border: 0;
+  background: var(--color-white);
+  color: var(--color-danger);
+  font-weight: 800;
+  text-align: left;
+}
+
+.user-menu__logout:hover {
+  background: var(--color-danger-soft);
+}
+
+.user-menu__logout:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 980px) {
+  .user-menu {
+    right: auto;
+    left: 0;
+    width: 100%;
+  }
+}
