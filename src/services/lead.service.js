@@ -27,6 +27,12 @@ import {
 
 function normalizePhone(phone = "") { return phone.replace(/\D/g, ""); }
 function normalizeEmail(email = "") { return email.trim().toLowerCase(); }
+function normalizeInstagram(value = "") {
+  const clean = value.trim();
+  if (!clean) return "";
+  if (/^https?:\/\//i.test(clean)) return clean;
+  return clean.replace(/^@/, "");
+}
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function getTimestampMillis(value) {
   if (!value) return 0;
@@ -116,6 +122,8 @@ export async function createLead(input) {
   batch.set(leadRef, {
     firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(),
     phone, phoneNormalized: normalizePhone(phone), email,
+    instagramHandle: normalizeInstagram(input.instagramHandle),
+    facebookUrl: input.facebookUrl?.trim() ?? "",
     channel: input.channel, source: input.source, entryPreset: input.entryPreset ?? "",
     tripIds, tripLabels, interest: tripLabels.join(", "), notes: input.notes?.trim() ?? "",
     status: LEAD_STATUSES.NEW, priority: LEAD_PRIORITIES.NORMAL, temperature: LEAD_TEMPERATURES.WARM,
