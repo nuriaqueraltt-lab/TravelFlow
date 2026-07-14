@@ -7,6 +7,9 @@ import { importLegacyLast55Once } from "../services/legacy-last55-import.service
 import { showLeadDetail } from "./leads.controller.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
 
+const SESSION_BOOTSTRAP_KEY = "travelflow:dashboard-bootstrap-complete";
+let dashboardLoading = false;
+
 function root() { return document.querySelector(".app-content"); }
 function startOfDay(date = new Date()) { const value = new Date(date); value.setHours(0, 0, 0, 0); return value; }
 function endOfDay(date = new Date()) { const value = new Date(date); value.setHours(23, 59, 59, 999); return value; }
@@ -20,12 +23,20 @@ function safeImageUrl(value = "", seed = "travel") {
 }
 
 async function runOptionalStep(label, callback) {
-  try {
-    return await callback();
-  } catch (error) {
-    console.warn(`[TravelFlow] ${label} no s'ha pogut completar, però el Dashboard continuarà carregant.`, error);
+  try { return await callback(); }
+  catch (error) {
+    console.warn(`[TravelFlow] ${label} no s'ha pogut completar.`, error);
     return null;
   }
+}
+
+async function runSessionBootstrap() {
+  if (sessionStorage.getItem(SESSION_BOOTSTRAP_KEY) === "done") return;
+  await Promise.all([
+    runOptionalStep("Importació històrica principal", importLegacyLeadsOnce),
+    runOptionalStep("Importació històrica complementària", importLegacyLast55Once)
+  ]);
+  sessionStorage.setItem(SESSION_BOOTSTRAP_KEY, "done");
 }
 
 function renderTask(task, todayStart, todayEnd) {
@@ -36,103 +47,44 @@ function renderTask(task, todayStart, todayEnd) {
 }
 
 function renderTripCards(trips, leads) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const upcoming = trips
-    .filter((trip) => trip.startDate && new Date(`${trip.startDate}T12:00:00`) >= today)
-    .sort((a, b) => a.startDate.localeCompare(b.startDate))
-    .slice(0, 4);
-
-  if (!upcoming.length) {
-    return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div></header><div class="daily-empty"><strong>No hi ha viatges amb data futura</strong><span>Afegeix o revisa les dates des del menú Viatges.</span></div></section>`;
-  }
-
-  return `
-    <section class="dashboard-trips">
-      <header class="dashboard-trips__header">
-        <div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div>
-        <p>Clica una targeta per veure només els leads d’aquell viatge.</p>
-      </header>
-      <div class="dashboard-trip-grid">
-        ${upcoming.map((trip) => {
-          const linkedLeads = leads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id));
-          const activeCount = linkedLeads.filter((lead) => !["LOST", "BOOKING_CONFIRMED"].includes(lead.status)).length;
-          const bookedCount = linkedLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
-          const imageUrl = safeImageUrl(trip.imageUrl, trip.id || trip.name);
-          const closingText = trip.closingDate ? `Tancament ${formatDate(`${trip.closingDate}T12:00:00`)}` : "Tancament pendent";
-
-          return `
-            <button class="dashboard-trip-card" type="button" data-dashboard-trip="${trip.id}" style="--trip-image:url('${escapeHtml(imageUrl)}')">
-              <span class="dashboard-trip-card__overlay"></span>
-              <span class="dashboard-trip-card__top">
-                <span class="dashboard-trip-card__date">${formatDate(`${trip.startDate}T12:00:00`)}</span>
-                <span class="dashboard-trip-card__closing ${trip.closingDate ? "" : "is-pending"}">${closingText}</span>
-              </span>
-              <span class="dashboard-trip-card__content">
-                <strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong>
-                <span>${activeCount} leads actius${bookedCount ? ` · ${bookedCount} reserves` : ""}</span>
-              </span>
-              <span class="dashboard-trip-card__arrow">Veure leads →</span>
-            </button>
-          `;
-        }).join("")}
-      </div>
-    </section>
-  `;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const upcoming = trips.filter((trip) => trip.startDate && new Date(`${trip.startDate}T12:00:00`) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate)).slice(0, 4);
+  if (!upcoming.length) return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div></header><div class="daily-empty"><strong>No hi ha viatges amb data futura</strong><span>Afegeix o revisa les dates des del menú Viatges.</span></div></section>`;
+  return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div><p>Clica una targeta per veure només els leads d’aquell viatge.</p></header><div class="dashboard-trip-grid">${upcoming.map((trip) => {
+    const linkedLeads = leads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id));
+    const activeCount = linkedLeads.filter((lead) => !["LOST", "BOOKING_CONFIRMED"].includes(lead.status)).length;
+    const bookedCount = linkedLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+    const imageUrl = safeImageUrl(trip.imageUrl, trip.id || trip.name);
+    const closingText = trip.closingDate ? `Tancament ${formatDate(`${trip.closingDate}T12:00:00`)}` : "Tancament pendent";
+    return `<button class="dashboard-trip-card" type="button" data-dashboard-trip="${trip.id}" style="--trip-image:url('${escapeHtml(imageUrl)}')"><span class="dashboard-trip-card__overlay"></span><span class="dashboard-trip-card__top"><span class="dashboard-trip-card__date">${formatDate(`${trip.startDate}T12:00:00`)}</span><span class="dashboard-trip-card__closing ${trip.closingDate ? "" : "is-pending"}">${closingText}</span></span><span class="dashboard-trip-card__content"><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${activeCount} leads actius${bookedCount ? ` · ${bookedCount} reserves` : ""}</span></span><span class="dashboard-trip-card__arrow">Veure leads →</span></button>`;
+  }).join("")}</div></section>`;
 }
 
 function renderDashboard(tasks, trips, leads) {
-  const todayStart = startOfDay();
-  const todayEnd = endOfDay();
+  const todayStart = startOfDay(); const todayEnd = endOfDay();
   const todayTasks = tasks.filter((task) => { const due = toDate(task.dueAt); return due && due <= todayEnd; });
   const upcoming = tasks.filter((task) => { const due = toDate(task.dueAt); return due && due > todayEnd; }).slice(0, 8);
   const overdueCount = todayTasks.filter((task) => toDate(task.dueAt) < todayStart).length;
   const taskList = (items, title, text) => items.length ? items.map((task) => renderTask(task, todayStart, todayEnd)).join("") : `<div class="daily-empty"><strong>${title}</strong><span>${text}</span></div>`;
-
-  return `
-    <section class="dashboard-view daily-dashboard">
-      <header class="page-heading">
-        <div><span class="section-kicker">La teva jornada comercial</span><h1>Tasques d'avui</h1><p>Tot el que necessita una acció, ordenat per prioritat i data.</p></div>
-        <button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button>
-      </header>
-      <section class="metrics-grid">
-        <article class="metric-card"><span class="metric-card__label">Pendents avui</span><strong>${todayTasks.length}</strong><small>Accions per completar</small></article>
-        <article class="metric-card metric-card--warning"><span class="metric-card__label">Vençudes</span><strong>${overdueCount}</strong><small>Necessiten atenció</small></article>
-        <article class="metric-card"><span class="metric-card__label">Properes</span><strong>${Math.max(tasks.length - todayTasks.length, 0)}</strong><small>Planificades</small></article>
-        <article class="metric-card"><span class="metric-card__label">Total obertes</span><strong>${tasks.length}</strong><small>Seguiments actius</small></article>
-      </section>
-      ${renderTripCards(trips, leads)}
-      <section class="daily-dashboard-grid">
-        <article class="content-card"><header class="content-card__header"><div><span class="section-kicker">Prioritat</span><h2>Avui i vençudes</h2></div></header><div class="daily-task-list">${taskList(todayTasks, "No tens tasques pendents per avui", "La teva llista està al dia.")}</div></article>
-        <article class="content-card"><header class="content-card__header"><div><span class="section-kicker">Planificació</span><h2>Pròximes accions</h2></div></header><div class="daily-task-list">${taskList(upcoming, "No hi ha accions futures", "Programa el següent contacte des de la fitxa del lead.")}</div></article>
-      </section>
-    </section>
-  `;
+  return `<section class="dashboard-view daily-dashboard"><header class="page-heading"><div><span class="section-kicker">La teva jornada comercial</span><h1>Tasques d'avui</h1><p>Tot el que necessita una acció, ordenat per prioritat i data.</p></div><button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button></header><section class="metrics-grid"><article class="metric-card"><span class="metric-card__label">Pendents avui</span><strong>${todayTasks.length}</strong><small>Accions per completar</small></article><article class="metric-card metric-card--warning"><span class="metric-card__label">Vençudes</span><strong>${overdueCount}</strong><small>Necessiten atenció</small></article><article class="metric-card"><span class="metric-card__label">Properes</span><strong>${Math.max(tasks.length - todayTasks.length, 0)}</strong><small>Planificades</small></article><article class="metric-card"><span class="metric-card__label">Total obertes</span><strong>${tasks.length}</strong><small>Seguiments actius</small></article></section>${renderTripCards(trips, leads)}<section class="daily-dashboard-grid"><article class="content-card"><header class="content-card__header"><div><span class="section-kicker">Prioritat</span><h2>Avui i vençudes</h2></div></header><div class="daily-task-list">${taskList(todayTasks, "No tens tasques pendents per avui", "La teva llista està al dia.")}</div></article><article class="content-card"><header class="content-card__header"><div><span class="section-kicker">Planificació</span><h2>Pròximes accions</h2></div></header><div class="daily-task-list">${taskList(upcoming, "No hi ha accions futures", "Programa el següent contacte des de la fitxa del lead.")}</div></article></section></section>`;
 }
 
 export async function showDailyDashboard() {
-  if (!root()) return;
+  if (!root() || dashboardLoading) return;
+  dashboardLoading = true;
+  window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Dashboard" } }));
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
-
   try {
-    await runOptionalStep("Importació històrica principal", importLegacyLeadsOnce);
-    await runOptionalStep("Importació històrica complementària", importLegacyLast55Once);
-
-    const leads = await getLeads();
-    await runOptionalStep("Creació de seguiments de proper any", ensureExpiredLeadNextYearTasks);
-
-    const [tasksResult, tripsResult] = await Promise.allSettled([getOpenTasks(), getTrips()]);
-    const tasks = tasksResult.status === "fulfilled" ? tasksResult.value : [];
-    const trips = tripsResult.status === "fulfilled" ? tripsResult.value : [];
-
-    if (tasksResult.status === "rejected") console.error("No s'han pogut carregar les tasques del Dashboard:", tasksResult.reason);
-    if (tripsResult.status === "rejected") console.error("No s'han pogut carregar els viatges del Dashboard:", tripsResult.reason);
-
+    await runSessionBootstrap();
+    const [leads, trips] = await Promise.all([getLeads(), getTrips()]);
+    const tasks = await getOpenTasks({ leads, trips });
     root().innerHTML = renderDashboard(tasks, trips, leads);
+    runOptionalStep("Creació de seguiments de proper any", ensureExpiredLeadNextYearTasks);
   } catch (error) {
     console.error("No s'ha pogut preparar el Dashboard:", error);
     root().innerHTML = `<div class="leads-error">No s'ha pogut carregar el Dashboard.</div>`;
+  } finally {
+    dashboardLoading = false;
   }
 }
 
@@ -146,9 +98,11 @@ document.addEventListener("click", (event) => {
   if (trip) showLeadsForTrip(trip.dataset.dashboardTrip);
 });
 
-window.addEventListener("travelflow:tasks-updated", showDailyDashboard);
+window.addEventListener("travelflow:tasks-updated", () => {
+  if (document.querySelector(".daily-dashboard")) showDailyDashboard();
+});
 const shellObserver = new MutationObserver(() => {
-  if (document.querySelector(".app-shell") && !document.querySelector(".daily-dashboard")) {
+  if (document.querySelector(".app-shell") && !document.querySelector(".app-content > *")) {
     shellObserver.disconnect();
     showDailyDashboard();
   }
