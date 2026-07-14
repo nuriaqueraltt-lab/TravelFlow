@@ -7,6 +7,7 @@ import {
   query,
   serverTimestamp,
   Timestamp,
+  updateDoc,
   where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -160,6 +161,57 @@ export async function createLead(input) {
 
   await batch.commit();
   return { id: leadRef.id, fullName, channel: input.channel, source: input.source };
+}
+
+export async function updateLead(leadId, input) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  const firstName = input.firstName?.trim();
+  const lastName = input.lastName?.trim() ?? "";
+  if (!firstName) throw new Error("FIRST_NAME_REQUIRED");
+
+  const tripIds = parseArrayValue(input.tripIds);
+  const tripLabels = parseArrayValue(input.tripLabels);
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  const phone = input.phone?.trim() ?? "";
+
+  await updateDoc(doc(db, "leads", leadId), {
+    firstName,
+    lastName,
+    fullName,
+    fullNameSearch: fullName.toLowerCase(),
+    phone,
+    phoneNormalized: normalizePhone(phone),
+    email: normalizeEmail(input.email),
+    instagramHandle: normalizeInstagram(input.instagramHandle),
+    facebookUrl: input.facebookUrl?.trim() ?? "",
+    notes: input.notes?.trim() ?? "",
+    tripIds,
+    tripLabels,
+    interest: tripLabels.join(", "),
+    updatedBy: currentUser.uid,
+    updatedAt: serverTimestamp()
+  });
+
+  const batch = writeBatch(db);
+  batch.set(doc(collection(db, "activities")), {
+    leadId,
+    type: ACTIVITY_TYPES.NOTE,
+    description: "Dades i etiquetes de la futura viatgera actualitzades.",
+    createdBy: currentUser.uid,
+    createdAt: serverTimestamp()
+  });
+  const taskSnapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId)));
+  taskSnapshot.docs.forEach((taskDoc) => {
+    if (taskDoc.data().status === TASK_STATUSES.PENDING) {
+      batch.update(taskDoc.ref, {
+        leadName: fullName,
+        tripName: tripLabels[0] || "",
+        updatedAt: serverTimestamp()
+      });
+    }
+  });
+  await batch.commit();
 }
 
 export async function getLeads() {
