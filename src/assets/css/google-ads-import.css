@@ -1,0 +1,151 @@
+.leads-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.google-ads-import-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.google-ads-import-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(20, 32, 27, 0.58);
+  backdrop-filter: blur(5px);
+}
+
+.google-ads-import-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(900px, 100%);
+  max-height: calc(100vh - 2rem);
+  gap: var(--space-4);
+  overflow: auto;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-radius: var(--radius-xl);
+  background: var(--color-white);
+  box-shadow: 0 28px 80px rgba(20, 32, 27, 0.3);
+}
+
+.google-ads-import-panel h2,
+.google-ads-import-panel p {
+  margin: 0;
+}
+
+.google-ads-import-panel > p {
+  color: var(--color-text-secondary);
+}
+
+.google-ads-import-panel__close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-white);
+  color: var(--color-text-primary);
+  font-size: 1.35rem;
+}
+
+.google-ads-import-field {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.google-ads-import-field textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  outline: 0;
+  background: var(--color-surface-soft);
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.google-ads-import-field textarea:focus {
+  border-color: var(--color-brand-600);
+  box-shadow: 0 0 0 4px rgba(95, 125, 108, 0.12);
+}
+
+.google-ads-import-preview {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-brand-050);
+}
+
+.google-ads-import-preview strong,
+.google-ads-import-preview span,
+.google-ads-import-preview small {
+  display: block;
+}
+
+.google-ads-import-preview small {
+  color: var(--color-text-secondary);
+}
+
+.google-ads-import-message {
+  min-height: 22px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.google-ads-import-message.is-error {
+  color: var(--color-danger);
+}
+
+.google-ads-import-message.is-success {
+  color: var(--color-brand-700);
+}
+
+.google-ads-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+@media (max-width: 720px) {
+  .leads-page-actions,
+  .google-ads-import-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .leads-page-actions button,
+  .google-ads-import-actions button {
+    width: 100%;
+  }
+
+  .google-ads-import-modal {
+    align-items: end;
+    padding: 0;
+  }
+
+  .google-ads-import-panel {
+    max-height: 92vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}
