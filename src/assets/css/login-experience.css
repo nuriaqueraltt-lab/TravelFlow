@@ -1,8 +1,8 @@
 .login-visual {
   isolation: isolate;
   background-image:
-    linear-gradient(145deg, rgba(20, 43, 33, 0.94), rgba(55, 85, 70, 0.82)),
-    url("https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=1800&q=85");
+    linear-gradient(145deg, rgba(20, 43, 33, 0.9), rgba(55, 85, 70, 0.72)),
+    url("https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=1800&q=88");
   background-position: center;
   background-size: cover;
 }
@@ -12,8 +12,8 @@
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(20, 39, 31, 0.08), rgba(20, 39, 31, 0.42)),
-    radial-gradient(circle at 78% 18%, rgba(236, 216, 180, 0.22), transparent 24%);
+    linear-gradient(180deg, rgba(20, 39, 31, 0.04), rgba(20, 39, 31, 0.48)),
+    radial-gradient(circle at 78% 18%, rgba(236, 216, 180, 0.2), transparent 24%);
   content: "";
 }
 
@@ -23,6 +23,45 @@
   width: 520px;
   height: 520px;
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+.login-visual__brand,
+.login-panel__mobile-brand {
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.login-brand-logo {
+  display: block;
+  width: clamp(72px, 7vw, 118px);
+  height: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.login-panel__mobile-brand .login-brand-logo {
+  width: 86px;
+  filter: none;
+}
+
+.login-brand-copy strong,
+.login-brand-copy span {
+  display: block;
+}
+
+.login-brand-copy strong {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  line-height: 1.05;
+}
+
+.login-brand-copy span {
+  margin-top: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  opacity: 0.74;
+  text-transform: uppercase;
 }
 
 .login-visual__content {
@@ -38,7 +77,7 @@
 
 .login-visual__content p {
   max-width: 620px;
-  color: rgba(255, 255, 255, 0.84);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .login-visual__eyebrow {
@@ -47,12 +86,15 @@
 }
 
 .login-visual__insight {
-  max-width: 430px;
-  background: rgba(247, 244, 236, 0.13);
+  max-width: 520px;
+  background: rgba(247, 244, 236, 0.14);
 }
 
 .login-visual__insight strong {
-  max-width: 310px;
+  max-width: 390px;
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.35vw, 1.2rem);
+  font-weight: 500;
   line-height: 1.45;
 }
 
