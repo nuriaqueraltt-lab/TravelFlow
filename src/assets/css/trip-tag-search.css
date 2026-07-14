@@ -1,0 +1,51 @@
+.trip-tag-search {
+  display: grid !important;
+  gap: var(--space-2) !important;
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.trip-tag-search__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.trip-tag-search__control {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  color: var(--color-text-muted);
+}
+
+.trip-tag-search__control:focus-within {
+  border-color: var(--color-brand-600);
+  box-shadow: 0 0 0 4px rgba(95, 125, 108, 0.12);
+}
+
+.trip-tag-search__control input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.trip-tag-search__empty {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.trip-tag-options-list .lead-edit-trip[hidden] {
+  display: none !important;
+}
