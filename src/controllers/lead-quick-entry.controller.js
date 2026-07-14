@@ -77,7 +77,7 @@ function showForm(presetKey) { content.innerHTML = renderLeadForm(presetKey); co
 function setSavingState(form, saving) { const saveButton = form.querySelector("[data-save-lead]"); const cancelButton = form.querySelector("[data-entry-close]"); if (saveButton) { saveButton.disabled = saving; saveButton.textContent = saving ? "Guardant..." : "Guardar futura viatgera"; } if (cancelButton) cancelButton.disabled = saving; }
 
 document.addEventListener("click", (event) => {
-  const newLeadButton = event.target.closest(".page-heading .primary-button--compact, [data-open-new-lead]");
+  const newLeadButton = event.target.closest("[data-open-new-lead]");
   const sourceButton = event.target.closest("[data-entry-source]");
   const closeButton = event.target.closest("[data-entry-close]");
   const backButton = event.target.closest("[data-entry-back]");
