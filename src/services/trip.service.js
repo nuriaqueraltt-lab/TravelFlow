@@ -14,10 +14,17 @@ import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { INITIAL_TRIP_TAGS } from "../data/trip-tags.seed.js";
 
+const CACHE_TTL = 60 * 1000;
+const SEED_SESSION_KEY = "travelflow:trip-catalogue-checked";
+let tripsCache = null;
+let tripsCacheAt = 0;
+let tripsRequest = null;
+
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function slugify(value = "") {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 100);
 }
+function invalidateTripsCache() { tripsCache = null; tripsCacheAt = 0; }
 function imageForTrip(name = "") {
   const key = name.toLowerCase();
   if (key.includes("múnich") || key.includes("munich") || key.includes("salzburgo")) return "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1200&q=80";
@@ -30,17 +37,33 @@ function imageForTrip(name = "") {
   return "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80";
 }
 
-export async function getTrips() {
-  const snapshot = await getDocs(query(collection(db, "trips"), orderBy("name", "asc")));
-  return snapshot.docs.map(mapDocument).filter((trip) => trip.active !== false);
+export async function getTrips({ force = false } = {}) {
+  if (!force && tripsCache && Date.now() - tripsCacheAt < CACHE_TTL) return tripsCache;
+  if (!force && tripsRequest) return tripsRequest;
+  tripsRequest = getDocs(query(collection(db, "trips"), orderBy("name", "asc")))
+    .then((snapshot) => {
+      tripsCache = snapshot.docs.map(mapDocument).filter((trip) => trip.active !== false);
+      tripsCacheAt = Date.now();
+      return tripsCache;
+    })
+    .finally(() => { tripsRequest = null; });
+  return tripsRequest;
 }
 
 export async function seedInitialTrips() {
   const currentUser = getCurrentUser();
   if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (sessionStorage.getItem(SEED_SESSION_KEY) === "done") return 0;
+
+  const currentTrips = await getTrips();
+  const currentNames = new Set(currentTrips.map((trip) => trip.name));
+  const missingTrips = INITIAL_TRIP_TAGS.filter((trip) => !currentNames.has(trip.name));
+  sessionStorage.setItem(SEED_SESSION_KEY, "done");
+  if (!missingTrips.length) return 0;
+
   const batch = writeBatch(db);
   const now = serverTimestamp();
-  INITIAL_TRIP_TAGS.forEach((trip) => {
+  missingTrips.forEach((trip) => {
     const reference = doc(db, "trips", slugify(trip.name));
     batch.set(reference, {
       name: trip.name,
@@ -60,7 +83,8 @@ export async function seedInitialTrips() {
     }, { merge: true });
   });
   await batch.commit();
-  return INITIAL_TRIP_TAGS.length;
+  invalidateTripsCache();
+  return missingTrips.length;
 }
 
 export async function createTripTag({ name, startDate, endDate, closingDate = "", imageUrl = "" }) {
@@ -88,6 +112,7 @@ export async function createTripTag({ name, startDate, endDate, closingDate = ""
     updatedAt: serverTimestamp()
   };
   const reference = await addDoc(collection(db, "trips"), trip);
+  invalidateTripsCache();
   return { id: reference.id, ...trip };
 }
 
@@ -107,6 +132,7 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
     updatedBy: currentUser.uid,
     updatedAt: serverTimestamp()
   });
+  invalidateTripsCache();
 }
 
 export function getTripErrorMessage(error) {
