@@ -23,22 +23,29 @@ import {
   TASK_TYPES
 } from "../config/app.constants.js";
 
+const MAINTENANCE_KEY = "travelflow:dashboard-maintenance";
+const MAINTENANCE_TTL = 5 * 60 * 1000;
+
 function addDays(date, days) { const result = new Date(date); result.setHours(9, 0, 0, 0); result.setDate(result.getDate() + days); return result; }
 function asTimestamp(value) { if (!value) return null; if (typeof value.toDate === "function") return value; const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? null : Timestamp.fromDate(date); }
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function todayIso() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
+function shouldRunMaintenance() {
+  const lastRun = Number(sessionStorage.getItem(MAINTENANCE_KEY) || 0);
+  return !lastRun || Date.now() - lastRun > MAINTENANCE_TTL;
+}
 
 export async function getLeadTasks(leadId) {
   const snapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId)));
   return snapshot.docs.map(mapDocument).sort((a, b) => (a.dueAt?.toMillis?.() ?? 0) - (b.dueAt?.toMillis?.() ?? 0));
 }
 
-export async function processClosedTrips() {
+export async function processClosedTrips({ trips: suppliedTrips = null, leads: suppliedLeads = null } = {}) {
   const user = getCurrentUser();
   if (!user) return 0;
-  const [trips, leadsSnapshot, pendingTasksSnapshot] = await Promise.all([
-    getTrips(),
-    getDocs(collection(db, "leads")),
+  const [trips, leads, pendingTasksSnapshot] = await Promise.all([
+    suppliedTrips ? Promise.resolve(suppliedTrips) : getTrips(),
+    suppliedLeads ? Promise.resolve(suppliedLeads) : getDocs(collection(db, "leads")).then((snapshot) => snapshot.docs.map(mapDocument)),
     getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)))
   ]);
   const today = todayIso();
@@ -48,58 +55,65 @@ export async function processClosedTrips() {
     const task = item.data();
     return `${task.leadId}|${task.tripId}|${task.type}`;
   }));
-  const leads = leadsSnapshot.docs.map(mapDocument).filter((lead) => lead.active !== false && ![LEAD_STATUSES.LOST, LEAD_STATUSES.BOOKING_CONFIRMED].includes(lead.status));
-  const batch = writeBatch(db);
-  let created = 0;
+  const activeLeads = leads.filter((lead) => lead.active !== false && ![LEAD_STATUSES.LOST, LEAD_STATUSES.BOOKING_CONFIRMED].includes(lead.status));
+  const operations = [];
   closedTrips.forEach((trip) => {
-    leads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id)).forEach((lead) => {
+    activeLeads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id)).forEach((lead) => {
       const key = `${lead.id}|${trip.id}|${TASK_TYPES.TRIP_CLOSED}`;
       if (pendingKeys.has(key)) return;
-      const taskRef = doc(collection(db, "tasks"));
-      batch.set(taskRef, {
-        leadId: lead.id,
-        leadName: lead.fullName,
-        tripId: trip.id,
-        tripName: trip.name,
-        title: "Viatge tancat",
-        type: TASK_TYPES.TRIP_CLOSED,
-        status: TASK_STATUSES.PENDING,
-        automatic: true,
-        dueAt: Timestamp.fromDate(new Date(`${trip.closingDate}T09:00:00`)),
-        createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+      operations.push((batch) => {
+        batch.set(doc(collection(db, "tasks")), {
+          leadId: lead.id, leadName: lead.fullName, tripId: trip.id, tripName: trip.name,
+          title: "Viatge tancat", type: TASK_TYPES.TRIP_CLOSED, status: TASK_STATUSES.PENDING,
+          automatic: true, dueAt: Timestamp.fromDate(new Date(`${trip.closingDate}T09:00:00`)),
+          createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        batch.set(doc(collection(db, "activities")), {
+          leadId: lead.id, type: ACTIVITY_TYPES.TRIP_CLOSED,
+          description: `${trip.name}: viatge tancat. Cal decidir llista d'espera, proper any o pèrdua.`,
+          tripId: trip.id, createdBy: user.uid, createdAt: serverTimestamp()
+        });
       });
-      batch.set(doc(collection(db, "activities")), {
-        leadId: lead.id,
-        type: ACTIVITY_TYPES.TRIP_CLOSED,
-        description: `${trip.name}: viatge tancat. Cal decidir llista d'espera, proper any o pèrdua.`,
-        tripId: trip.id,
-        createdBy: user.uid,
-        createdAt: serverTimestamp()
-      });
-      created += 1;
+      pendingKeys.add(key);
     });
   });
-  if (created) await batch.commit();
-  return created;
+  for (let start = 0; start < operations.length; start += 220) {
+    const batch = writeBatch(db);
+    operations.slice(start, start + 220).forEach((operation) => operation(batch));
+    await batch.commit();
+  }
+  return operations.length;
 }
 
-export async function getOpenTasks() {
-  await processClosedTrips();
+export async function getOpenTasks({ leads = null, trips = null, runMaintenance = true } = {}) {
+  if (runMaintenance && shouldRunMaintenance()) {
+    await processClosedTrips({ leads, trips });
+    sessionStorage.setItem(MAINTENANCE_KEY, String(Date.now()));
+  }
   const snapshot = await getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)));
   const tasks = snapshot.docs.map(mapDocument);
-  const leadIds = [...new Set(tasks.map((task) => task.leadId).filter(Boolean))];
-  const leadEntries = await Promise.all(leadIds.map(async (leadId) => {
-    const snapshot = await getDoc(doc(db, "leads", leadId));
-    return [leadId, snapshot.exists() && snapshot.data().active !== false];
-  }));
-  const existing = new Map(leadEntries);
+  let existing;
+  if (Array.isArray(leads)) {
+    existing = new Map(leads.map((lead) => [lead.id, lead.active !== false]));
+  } else {
+    const leadIds = [...new Set(tasks.map((task) => task.leadId).filter(Boolean))];
+    const leadEntries = await Promise.all(leadIds.map(async (leadId) => {
+      const leadSnapshot = await getDoc(doc(db, "leads", leadId));
+      return [leadId, leadSnapshot.exists() && leadSnapshot.data().active !== false];
+    }));
+    existing = new Map(leadEntries);
+  }
   const orphaned = tasks.filter((task) => !existing.get(task.leadId));
   if (orphaned.length) {
-    const batch = writeBatch(db);
-    orphaned.forEach((task) => batch.update(doc(db, "tasks", task.id), { status: TASK_STATUSES.CANCELLED, cancelledReason: "LEAD_DELETED_OR_INACTIVE", updatedAt: serverTimestamp() }));
-    await batch.commit();
+    for (let start = 0; start < orphaned.length; start += 400) {
+      const batch = writeBatch(db);
+      orphaned.slice(start, start + 400).forEach((task) => batch.update(doc(db, "tasks", task.id), {
+        status: TASK_STATUSES.CANCELLED,
+        cancelledReason: "LEAD_DELETED_OR_INACTIVE",
+        updatedAt: serverTimestamp()
+      }));
+      await batch.commit();
+    }
   }
   return tasks.filter((task) => existing.get(task.leadId)).sort((a, b) => (a.dueAt?.toMillis?.() ?? 0) - (b.dueAt?.toMillis?.() ?? 0));
 }
