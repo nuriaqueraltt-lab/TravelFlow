@@ -49,12 +49,42 @@ export async function getLeadTasks(leadId) {
 }
 
 export async function getOpenTasks() {
-  const snapshot = await getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)));
-  return snapshot.docs.map(mapDocument).sort((a, b) => {
-    const aTime = a.dueAt?.toMillis?.() ?? 0;
-    const bTime = b.dueAt?.toMillis?.() ?? 0;
-    return aTime - bTime;
-  });
+  const [tasksSnapshot, leadsSnapshot] = await Promise.all([
+    getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING))),
+    getDocs(collection(db, "leads"))
+  ]);
+
+  const activeLeadIds = new Set(
+    leadsSnapshot.docs
+      .filter((leadDoc) => leadDoc.data().active !== false)
+      .map((leadDoc) => leadDoc.id)
+  );
+
+  const orphanTaskDocs = tasksSnapshot.docs.filter(
+    (taskDoc) => !activeLeadIds.has(taskDoc.data().leadId)
+  );
+
+  if (orphanTaskDocs.length) {
+    const batch = writeBatch(db);
+    orphanTaskDocs.forEach((taskDoc) => {
+      batch.update(taskDoc.ref, {
+        status: TASK_STATUSES.CANCELLED,
+        cancelledReason: "LEAD_DELETED_OR_INACTIVE",
+        cancelledAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    });
+    await batch.commit();
+  }
+
+  return tasksSnapshot.docs
+    .filter((taskDoc) => activeLeadIds.has(taskDoc.data().leadId))
+    .map(mapDocument)
+    .sort((a, b) => {
+      const aTime = a.dueAt?.toMillis?.() ?? 0;
+      const bTime = b.dueAt?.toMillis?.() ?? 0;
+      return aTime - bTime;
+    });
 }
 
 export async function cancelPendingAutomaticTasks(leadId, batch = null) {
