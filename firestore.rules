@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isOwnUser(userId);
+      allow update: if isOwnUser(userId);
+      allow delete: if false;
+    }
+
+    match /leads/{leadId} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /activities/{activityId} {
+      allow read, create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    match /tasks/{taskId} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /trips/{tripId} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /ai_suggestions/{suggestionId} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
