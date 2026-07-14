@@ -50,8 +50,14 @@ function parseArrayValue(value) {
 function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
-function addDays(days) {
-  const date = new Date();
+function dateAtLocalTime(value, hour = 10) {
+  if (!value) return new Date();
+  const date = new Date(`${value}T${String(hour).padStart(2, "0")}:00:00`);
+  if (Number.isNaN(date.getTime())) throw new Error("INVALID_CONTACT_DATE");
+  return date;
+}
+function addDaysFrom(baseDate, days) {
+  const date = new Date(baseDate);
   date.setHours(9, 0, 0, 0);
   date.setDate(date.getDate() + days);
   return date;
@@ -108,6 +114,16 @@ export async function createLead(input) {
   if (!firstName) throw new Error("FIRST_NAME_REQUIRED");
   if (!input.channel || !input.source) throw new Error("ENTRY_SOURCE_REQUIRED");
 
+  const today = todayIso();
+  if (input.entryDate && input.entryDate > today) throw new Error("ENTRY_DATE_FUTURE");
+  if (input.lastContactDate && input.lastContactDate > today) throw new Error("LAST_CONTACT_DATE_FUTURE");
+  if (input.entryDate && input.lastContactDate && input.lastContactDate < input.entryDate) throw new Error("CONTACT_DATE_ORDER");
+
+  const entryDate = dateAtLocalTime(input.entryDate, 10);
+  const lastContactDate = dateAtLocalTime(input.lastContactDate || input.entryDate, 12);
+  const entryTimestamp = Timestamp.fromDate(entryDate);
+  const lastContactTimestamp = Timestamp.fromDate(lastContactDate);
+
   const leadRef = doc(collection(db, "leads"));
   const activityRef = doc(collection(db, "activities"));
   const taskRef = doc(collection(db, "tasks"));
@@ -118,7 +134,7 @@ export async function createLead(input) {
   const tripIds = parseArrayValue(input.tripIds);
   const tripLabels = parseArrayValue(input.tripLabels);
   const now = serverTimestamp();
-  const firstFollowUpAt = Timestamp.fromDate(addDays(FOLLOW_UP_DEFAULTS.FIRST_DAYS));
+  const firstFollowUpAt = Timestamp.fromDate(addDaysFrom(lastContactDate, FOLLOW_UP_DEFAULTS.FIRST_DAYS));
 
   batch.set(leadRef, {
     firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(),
@@ -129,9 +145,9 @@ export async function createLead(input) {
     tripIds, tripLabels, interest: tripLabels.join(", "), notes: input.notes?.trim() ?? "",
     status: LEAD_STATUSES.NEW, priority: LEAD_PRIORITIES.NORMAL, temperature: LEAD_TEMPERATURES.WARM,
     ownerId: currentUser.uid, createdBy: currentUser.uid, updatedBy: currentUser.uid,
-    active: true, noResponseCount: 0, lastContactAt: now,
+    active: true, noResponseCount: 0, lastContactAt: lastContactTimestamp,
     nextActionTitle: "Primer seguiment pendent", nextActionAt: firstFollowUpAt,
-    createdAt: now, updatedAt: now
+    createdAt: entryTimestamp, updatedAt: now
   });
 
   batch.set(activityRef, {
@@ -141,7 +157,7 @@ export async function createLead(input) {
     channel: input.channel,
     source: input.source,
     createdBy: currentUser.uid,
-    createdAt: now
+    createdAt: entryTimestamp
   });
 
   batch.set(taskRef, {
@@ -231,6 +247,10 @@ export function getLeadErrorMessage(error) {
     AUTH_REQUIRED: "La sessió ha caducat. Torna a iniciar sessió.",
     FIRST_NAME_REQUIRED: "Introdueix el nom de la futura viatgera.",
     ENTRY_SOURCE_REQUIRED: "Selecciona el canal d'entrada abans de guardar.",
+    INVALID_CONTACT_DATE: "Alguna de les dates indicades no és vàlida.",
+    ENTRY_DATE_FUTURE: "La data d'entrada no pot ser posterior a avui.",
+    LAST_CONTACT_DATE_FUTURE: "La data de l'últim contacte no pot ser posterior a avui.",
+    CONTACT_DATE_ORDER: "L'últim contacte no pot ser anterior a la data d'entrada.",
     "permission-denied": "Firestore encara bloqueja l'escriptura. Cal publicar les regles del projecte.",
     unavailable: "No s'ha pogut connectar amb Firestore. Revisa la connexió."
   };
