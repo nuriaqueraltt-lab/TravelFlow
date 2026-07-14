@@ -1,32 +1,35 @@
+import { createLead, getLeadErrorMessage } from "../services/lead.service.js";
+import { LEAD_CHANNELS, LEAD_SOURCES } from "../config/app.constants.js";
+
 const ENTRY_PRESETS = {
   WEB_FORM: {
     label: "Formulari web",
-    channel: "WEB",
-    origin: "WEBSITE",
+    channel: LEAD_CHANNELS.WEB,
+    source: LEAD_SOURCES.WEBSITE_FORM,
     icon: "⌁"
   },
   GOOGLE_ADS: {
     label: "Google Ads",
-    channel: "WEB",
-    origin: "GOOGLE_ADS",
+    channel: LEAD_CHANNELS.WEB,
+    source: LEAD_SOURCES.GOOGLE_ADS,
     icon: "G"
   },
   WHATSAPP: {
     label: "WhatsApp",
-    channel: "WHATSAPP",
-    origin: "WHATSAPP",
+    channel: LEAD_CHANNELS.WHATSAPP,
+    source: LEAD_SOURCES.WHATSAPP,
     icon: "W"
   },
   INSTAGRAM: {
     label: "Instagram",
-    channel: "INSTAGRAM",
-    origin: "INSTAGRAM",
+    channel: LEAD_CHANNELS.INSTAGRAM,
+    source: LEAD_SOURCES.INSTAGRAM_ORGANIC,
     icon: "I"
   },
   FACEBOOK: {
     label: "Facebook",
-    channel: "FACEBOOK",
-    origin: "FACEBOOK",
+    channel: LEAD_CHANNELS.FACEBOOK,
+    source: LEAD_SOURCES.FACEBOOK_ORGANIC,
     icon: "F"
   }
 };
@@ -75,7 +78,8 @@ function renderLeadForm(presetKey) {
       <form class="quick-lead-form" id="quickLeadForm" novalidate>
         <input type="hidden" name="entryPreset" value="${presetKey}" />
         <input type="hidden" name="channel" value="${preset.channel}" />
-        <input type="hidden" name="origin" value="${preset.origin}" />
+        <input type="hidden" name="source" value="${preset.source}" />
+        <input type="hidden" name="entryLabel" value="${preset.label}" />
 
         <div class="quick-lead-form__grid">
           <label class="form-field">
@@ -121,7 +125,9 @@ function renderLeadForm(presetKey) {
 
         <div class="quick-lead-form__actions">
           <button class="secondary-button" type="button" data-entry-close>Cancel·lar</button>
-          <button class="primary-button primary-button--compact" type="submit">Guardar futura viatgera</button>
+          <button class="primary-button primary-button--compact" type="submit" data-save-lead>
+            Guardar futura viatgera
+          </button>
         </div>
         <p class="quick-lead-form__message" id="quickLeadMessage" role="status"></p>
       </form>
@@ -167,6 +173,18 @@ function showForm(presetKey) {
   content.querySelector("input[name='firstName']")?.focus();
 }
 
+function setSavingState(form, saving) {
+  const saveButton = form.querySelector("[data-save-lead]");
+  const cancelButton = form.querySelector("[data-entry-close]");
+
+  if (saveButton) {
+    saveButton.disabled = saving;
+    saveButton.textContent = saving ? "Guardant..." : "Guardar futura viatgera";
+  }
+
+  if (cancelButton) cancelButton.disabled = saving;
+}
+
 document.addEventListener("click", (event) => {
   const newLeadButton = event.target.closest(".page-heading .primary-button--compact");
   const sourceButton = event.target.closest("[data-entry-source]");
@@ -194,7 +212,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
-document.addEventListener("submit", (event) => {
+document.addEventListener("submit", async (event) => {
   if (event.target.id !== "quickLeadForm") return;
 
   event.preventDefault();
@@ -206,7 +224,29 @@ document.addEventListener("submit", (event) => {
     return;
   }
 
-  message.textContent = "Formulari preparat. Al següent pas el guardarem a Firestore.";
+  const formData = new FormData(form);
+  const leadInput = Object.fromEntries(formData.entries());
+
+  message.classList.remove("is-error", "is-success");
+  message.textContent = "";
+  setSavingState(form, true);
+
+  try {
+    const lead = await createLead(leadInput);
+    message.classList.add("is-success");
+    message.textContent = `${lead.fullName} s'ha guardat correctament.`;
+
+    window.dispatchEvent(
+      new CustomEvent("travelflow:lead-created", { detail: lead })
+    );
+
+    window.setTimeout(closeModal, 850);
+  } catch (error) {
+    console.error("No s'ha pogut crear el lead:", error);
+    message.classList.add("is-error");
+    message.textContent = getLeadErrorMessage(error);
+    setSavingState(form, false);
+  }
 });
 
 document.addEventListener("keydown", (event) => {
