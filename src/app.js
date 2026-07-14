@@ -66,13 +66,7 @@ function renderLoginView() {
                   <path d="M4 6h16v12H4z" />
                   <path d="m4 7 8 6 8-6" />
                 </svg>
-                <input
-                  type="email"
-                  name="email"
-                  autocomplete="email"
-                  placeholder="nom@donesiviatgeres.com"
-                  required
-                />
+                <input type="email" name="email" autocomplete="email" placeholder="nom@donesiviatgeres.com" required />
               </div>
             </label>
 
@@ -83,20 +77,8 @@ function renderLoginView() {
                   <rect x="5" y="10" width="14" height="10" rx="2" />
                   <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                 </svg>
-                <input
-                  id="passwordInput"
-                  type="password"
-                  name="password"
-                  autocomplete="current-password"
-                  placeholder="Introdueix la teva contrasenya"
-                  required
-                />
-                <button
-                  class="password-toggle"
-                  id="passwordToggle"
-                  type="button"
-                  aria-label="Mostrar la contrasenya"
-                >
+                <input id="passwordInput" type="password" name="password" autocomplete="current-password" placeholder="Introdueix la teva contrasenya" required />
+                <button class="password-toggle" id="passwordToggle" type="button" aria-label="Mostrar la contrasenya">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
                     <circle cx="12" cy="12" r="2.5" />
@@ -134,19 +116,221 @@ function renderLoginView() {
   `;
 }
 
+function renderIcon(name) {
+  const icons = {
+    dashboard: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />',
+    leads: '<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="7" r="4" /><path d="M19 8v6M16 11h6" />',
+    clients: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />',
+    trips: '<path d="M3 12h18M12 3a15.3 15.3 0 0 1 0 18M12 3a15.3 15.3 0 0 0 0 18" /><circle cx="12" cy="12" r="9" />',
+    tasks: '<path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />',
+    settings: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09a1.7 1.7 0 0 0-1.1-1.51 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.34.7.6 1 .3.28.68.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" />'
+  };
+
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
+}
+
+function renderSidebarItem({ icon, label, active = false, soon = false }) {
+  return `
+    <button class="sidebar-nav__item ${active ? "is-active" : ""}" type="button" ${soon ? "disabled" : ""}>
+      ${renderIcon(icon)}
+      <span>${label}</span>
+      ${soon ? '<small>Properament</small>' : ""}
+    </button>
+  `;
+}
+
+function renderDashboardView() {
+  return `
+    <section class="dashboard-view">
+      <header class="page-heading">
+        <div>
+          <span class="section-kicker">Dimarts, 14 de juliol</span>
+          <h1>Bon dia, Núria</h1>
+          <p>Tens 5 futures viatgeres esperant una resposta. Comencem?</p>
+        </div>
+        <button class="primary-button primary-button--compact" type="button">+ Nou lead</button>
+      </header>
+
+      <section class="assistant-card">
+        <div class="assistant-card__icon">✦</div>
+        <div class="assistant-card__content">
+          <span>Assistent TravelFlow</span>
+          <h2>Avui començaria per tres seguiments prioritaris.</h2>
+          <p>Hi ha dues viatgeres amb alta intenció de reserva i una consulta nova sense respondre.</p>
+        </div>
+        <button class="assistant-card__button" type="button">Veure propostes</button>
+      </section>
+
+      <section class="metrics-grid" aria-label="Resum del dia">
+        <article class="metric-card">
+          <span class="metric-card__label">Leads nous</span>
+          <strong>12</strong>
+          <small>+4 aquesta setmana</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-card__label">Seguiments d'avui</span>
+          <strong>7</strong>
+          <small>3 són prioritaris</small>
+        </article>
+        <article class="metric-card metric-card--warning">
+          <span class="metric-card__label">Seguiments vençuts</span>
+          <strong>3</strong>
+          <small>Necessiten atenció</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-card__label">Reserves iniciades</span>
+          <strong>5</strong>
+          <small>2 pendents de confirmació</small>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="content-card">
+          <header class="content-card__header">
+            <div>
+              <span class="section-kicker">Prioritats</span>
+              <h2>Accions pendents</h2>
+            </div>
+            <button class="link-button" type="button">Veure totes</button>
+          </header>
+
+          <div class="action-list">
+            <article class="action-item">
+              <div class="action-item__avatar">MG</div>
+              <div class="action-item__content">
+                <strong>Maria Garcia</strong>
+                <span>Irlanda 2027 · informació enviada fa 3 dies</span>
+              </div>
+              <span class="status-badge status-badge--danger">Avui</span>
+            </article>
+            <article class="action-item">
+              <div class="action-item__avatar">CR</div>
+              <div class="action-item__content">
+                <strong>Cristina Ruiz</strong>
+                <span>Noruega · pendent confirmar preu dels vols</span>
+              </div>
+              <span class="status-badge status-badge--warning">Prioritari</span>
+            </article>
+            <article class="action-item">
+              <div class="action-item__avatar">PM</div>
+              <div class="action-item__content">
+                <strong>Paula Martínez</strong>
+                <span>Nova York · consulta nova d'Instagram</span>
+              </div>
+              <span class="status-badge status-badge--success">Nou</span>
+            </article>
+          </div>
+        </article>
+
+        <article class="content-card travel-interest-card">
+          <header class="content-card__header">
+            <div>
+              <span class="section-kicker">Interès</span>
+              <h2>Viatges destacats</h2>
+            </div>
+          </header>
+
+          <div class="interest-list">
+            <div class="interest-item">
+              <div><strong>Irlanda 2027</strong><span>18 interessades</span></div>
+              <div class="interest-bar"><span style="width: 88%"></span></div>
+            </div>
+            <div class="interest-item">
+              <div><strong>Noruega</strong><span>12 interessades</span></div>
+              <div class="interest-bar"><span style="width: 66%"></span></div>
+            </div>
+            <div class="interest-item">
+              <div><strong>Nova York</strong><span>9 interessades</span></div>
+              <div class="interest-bar"><span style="width: 52%"></span></div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </section>
+  `;
+}
+
+function renderAppShell() {
+  return `
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar__brand">
+          ${renderBrandMark()}
+          <div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Navegació principal">
+          <span class="sidebar-nav__label">Espai de treball</span>
+          ${renderSidebarItem({ icon: "dashboard", label: "Dashboard", active: true })}
+          ${renderSidebarItem({ icon: "leads", label: "Leads" })}
+          ${renderSidebarItem({ icon: "clients", label: "Clientes", soon: true })}
+          ${renderSidebarItem({ icon: "trips", label: "Viatges", soon: true })}
+          ${renderSidebarItem({ icon: "tasks", label: "Tasques", soon: true })}
+          <span class="sidebar-nav__label sidebar-nav__label--secondary">Sistema</span>
+          ${renderSidebarItem({ icon: "settings", label: "Configuració", soon: true })}
+        </nav>
+
+        <footer class="sidebar-user">
+          <div class="sidebar-user__avatar">NQ</div>
+          <div><strong>Núria Queralt</strong><span>Administració</span></div>
+          <button type="button" aria-label="Més opcions">•••</button>
+        </footer>
+      </aside>
+
+      <section class="app-main">
+        <header class="topbar">
+          <button class="topbar__menu" id="menuToggle" type="button" aria-label="Obrir menú">☰</button>
+          <div class="topbar-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input type="search" placeholder="Cerca una viatgera, viatge o tasca..." />
+            <kbd>⌘ K</kbd>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" type="button" aria-label="Notificacions">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg>
+              <span></span>
+            </button>
+            <div class="topbar-profile"><div>NQ</div><span>Núria</span></div>
+          </div>
+        </header>
+
+        <main class="app-content">
+          ${renderDashboardView()}
+        </main>
+      </section>
+      <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="Tancar menú"></button>
+    </div>
+  `;
+}
+
+function setupShellInteractions() {
+  const sidebar = document.querySelector("#sidebar");
+  const menuToggle = document.querySelector("#menuToggle");
+  const backdrop = document.querySelector("#sidebarBackdrop");
+
+  const closeSidebar = () => document.body.classList.remove("sidebar-open");
+  menuToggle?.addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
+  backdrop?.addEventListener("click", closeSidebar);
+  sidebar?.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+    if (window.innerWidth <= 980) closeSidebar();
+  }));
+}
+
+function showAppShell() {
+  const appRoot = document.querySelector("#app");
+  appRoot.innerHTML = renderAppShell();
+  setupShellInteractions();
+}
+
 function setupLoginInteractions() {
   const form = document.querySelector("#loginForm");
   const passwordInput = document.querySelector("#passwordInput");
   const passwordToggle = document.querySelector("#passwordToggle");
-  const message = document.querySelector("#loginMessage");
 
   passwordToggle?.addEventListener("click", () => {
     const shouldShow = passwordInput.type === "password";
     passwordInput.type = shouldShow ? "text" : "password";
-    passwordToggle.setAttribute(
-      "aria-label",
-      shouldShow ? "Amagar la contrasenya" : "Mostrar la contrasenya"
-    );
+    passwordToggle.setAttribute("aria-label", shouldShow ? "Amagar la contrasenya" : "Mostrar la contrasenya");
   });
 
   form?.addEventListener("submit", (event) => {
@@ -157,7 +341,7 @@ function setupLoginInteractions() {
       return;
     }
 
-    message.textContent = "Pantalla preparada. Connectarem Firebase al següent pas.";
+    showAppShell();
   });
 }
 
