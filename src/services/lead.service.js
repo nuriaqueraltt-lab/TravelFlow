@@ -1,7 +1,12 @@
 import {
   collection,
   doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
   serverTimestamp,
+  where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -20,6 +25,13 @@ function normalizePhone(phone = "") {
 
 function normalizeEmail(email = "") {
   return email.trim().toLowerCase();
+}
+
+function mapDocument(snapshot) {
+  return {
+    id: snapshot.id,
+    ...snapshot.data()
+  };
 }
 
 export async function createLead(input) {
@@ -95,6 +107,26 @@ export async function createLead(input) {
   };
 }
 
+export async function getLeads() {
+  const snapshot = await getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc")));
+  return snapshot.docs.map(mapDocument).filter((lead) => lead.active !== false);
+}
+
+export async function getLeadById(leadId) {
+  const snapshot = await getDoc(doc(db, "leads", leadId));
+  return snapshot.exists() ? mapDocument(snapshot) : null;
+}
+
+export async function getLeadActivities(leadId) {
+  const activitiesQuery = query(
+    collection(db, "activities"),
+    where("leadId", "==", leadId),
+    orderBy("createdAt", "desc")
+  );
+  const snapshot = await getDocs(activitiesQuery);
+  return snapshot.docs.map(mapDocument);
+}
+
 export function getLeadErrorMessage(error) {
   const messages = {
     AUTH_REQUIRED: "La sessió ha caducat. Torna a iniciar sessió.",
@@ -104,5 +136,5 @@ export function getLeadErrorMessage(error) {
     unavailable: "No s'ha pogut connectar amb Firestore. Revisa la connexió."
   };
 
-  return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut guardar la futura viatgera.";
+  return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació.";
 }
