@@ -38,6 +38,11 @@
   font-size: var(--font-size-lg);
 }
 
+/* La IA queda desactivada visualment fins a una fase futura. */
+.assistant-card {
+  display: none;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
