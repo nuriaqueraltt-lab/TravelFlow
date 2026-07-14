@@ -34,6 +34,13 @@ function mapDocument(snapshot) {
   };
 }
 
+function getTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  return new Date(value).getTime() || 0;
+}
+
 export async function createLead(input) {
   const currentUser = getCurrentUser();
 
@@ -118,13 +125,13 @@ export async function getLeadById(leadId) {
 }
 
 export async function getLeadActivities(leadId) {
-  const activitiesQuery = query(
-    collection(db, "activities"),
-    where("leadId", "==", leadId),
-    orderBy("createdAt", "desc")
+  const snapshot = await getDocs(
+    query(collection(db, "activities"), where("leadId", "==", leadId))
   );
-  const snapshot = await getDocs(activitiesQuery);
-  return snapshot.docs.map(mapDocument);
+
+  return snapshot.docs
+    .map(mapDocument)
+    .sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt));
 }
 
 export function getLeadErrorMessage(error) {
