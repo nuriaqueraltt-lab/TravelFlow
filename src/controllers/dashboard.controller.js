@@ -1,6 +1,7 @@
 import { getOpenTasks } from "../services/workflow.service.js";
 import { getTrips } from "../services/trip.service.js";
 import { getLeads } from "../services/lead.service.js";
+import { ensureExpiredLeadNextYearTasks } from "../services/expired-lead-followup.service.js";
 import { importLegacyLeadsOnce } from "../services/legacy-import.service.js";
 import { importLegacyLast55Once } from "../services/legacy-last55-import.service.js";
 import { showLeadDetail } from "./leads.controller.js";
@@ -107,7 +108,9 @@ export async function showDailyDashboard() {
   try {
     await importLegacyLeadsOnce();
     await importLegacyLast55Once();
-    const [tasks, trips, leads] = await Promise.all([getOpenTasks(), getTrips(), getLeads()]);
+    const leads = await getLeads();
+    await ensureExpiredLeadNextYearTasks();
+    const [tasks, trips] = await Promise.all([getOpenTasks(), getTrips()]);
     root().innerHTML = renderDashboard(tasks, trips, leads);
   } catch (error) {
     console.error("No s'ha pogut preparar el Dashboard:", error);
