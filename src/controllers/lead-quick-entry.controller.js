@@ -51,6 +51,14 @@ function renderLeadForm(presetKey) {
         <label class="form-field"><span>Telèfon${presetKey === "WHATSAPP" ? " *" : ""}</span><div class="form-control form-control--plain"><input name="phone" type="tel" autocomplete="tel" placeholder="+34 600 000 000" ${phoneRequired} /></div></label>
         <label class="form-field"><span>Correu electrònic</span><div class="form-control form-control--plain"><input name="email" type="email" autocomplete="email" placeholder="nom@correu.com" /></div></label>
         ${renderChannelSpecificField(presetKey)}
+        <fieldset class="quick-lead-form__wide lead-entry-dates">
+          <legend>Dates del contacte</legend>
+          <p>Només cal omplir-les si introdueixes una consulta d'un altre dia. Si les deixes buides, es guardarà la data d'avui.</p>
+          <div class="quick-lead-form__grid">
+            <label class="form-field"><span>Data d'entrada</span><div class="form-control form-control--plain"><input name="entryDate" type="date" /></div></label>
+            <label class="form-field"><span>Data de l'últim contacte</span><div class="form-control form-control--plain"><input name="lastContactDate" type="date" /></div></label>
+          </div>
+        </fieldset>
         <label class="form-field quick-lead-form__wide"><span>Primer missatge o observacions</span><textarea class="quick-lead-form__textarea" name="notes" rows="4" placeholder="Enganxa aquí el missatge rebut o afegeix una nota breu..."></textarea></label>
       </div>
       <div class="quick-lead-form__actions"><button class="secondary-button" type="button" data-entry-close>Cancel·lar</button><button class="primary-button primary-button--compact" type="submit" data-save-lead>Guardar futura viatgera</button></div>
