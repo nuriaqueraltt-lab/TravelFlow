@@ -269,7 +269,6 @@ document.addEventListener("click", (event) => {
   const navButton = event.target.closest(".sidebar-nav__item");
   const leadRow = event.target.closest("[data-lead-id]");
   const backButton = event.target.closest("[data-back-to-leads]");
-  const openNewLead = event.target.closest("[data-open-new-lead]");
 
   if (navButton?.textContent.trim().startsWith("Leads")) {
     markLeadsNavigationActive();
@@ -284,11 +283,6 @@ document.addEventListener("click", (event) => {
 
   if (backButton) {
     showLeadsView();
-    return;
-  }
-
-  if (openNewLead) {
-    document.querySelector(".page-heading .primary-button--compact")?.click();
   }
 });
 
