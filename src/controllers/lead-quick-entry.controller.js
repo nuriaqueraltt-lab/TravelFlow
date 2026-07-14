@@ -1,4 +1,5 @@
 import { createLead, getLeadErrorMessage } from "../services/lead.service.js";
+import { getTrips } from "../services/trip.service.js";
 import { LEAD_CHANNELS, LEAD_SOURCES } from "../config/app.constants.js";
 
 const ENTRY_PRESETS = {
@@ -8,6 +9,18 @@ const ENTRY_PRESETS = {
   INSTAGRAM: { label: "Instagram", channel: LEAD_CHANNELS.INSTAGRAM, source: LEAD_SOURCES.INSTAGRAM_ORGANIC, icon: "I" },
   FACEBOOK: { label: "Facebook", channel: LEAD_CHANNELS.FACEBOOK, source: LEAD_SOURCES.FACEBOOK_ORGANIC, icon: "F" }
 };
+
+let tripsCache = [];
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>'"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;"
+  }[char]));
+}
 
 function renderSourceStep() {
   const options = Object.entries(ENTRY_PRESETS).map(([key, preset]) => `
@@ -33,6 +46,15 @@ function renderChannelSpecificField(presetKey) {
   return "";
 }
 
+function renderTripOptions() {
+  if (!tripsCache.length) return `<p class="lead-entry-trips__empty">Encara no hi ha etiquetes de viatge disponibles.</p>`;
+  return tripsCache.map((trip) => `
+    <label class="lead-edit-trip">
+      <input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" />
+      <span>${escapeHtml(trip.name)}</span>
+    </label>`).join("");
+}
+
 function renderLeadForm(presetKey) {
   const preset = ENTRY_PRESETS[presetKey];
   const phoneRequired = presetKey === "WHATSAPP" ? "required" : "";
@@ -51,6 +73,11 @@ function renderLeadForm(presetKey) {
         <label class="form-field"><span>Telèfon${presetKey === "WHATSAPP" ? " *" : ""}</span><div class="form-control form-control--plain"><input name="phone" type="tel" autocomplete="tel" placeholder="+34 600 000 000" ${phoneRequired} /></div></label>
         <label class="form-field"><span>Correu electrònic</span><div class="form-control form-control--plain"><input name="email" type="email" autocomplete="email" placeholder="nom@correu.com" /></div></label>
         ${renderChannelSpecificField(presetKey)}
+        <fieldset class="quick-lead-form__wide lead-edit-trips lead-entry-trips">
+          <legend>Etiquetes de viatge</legend>
+          <p>Selecciona un o diversos viatges d'interès. També pots deixar-ho sense etiqueta.</p>
+          <div>${renderTripOptions()}</div>
+        </fieldset>
         <fieldset class="quick-lead-form__wide lead-entry-dates">
           <legend>Dates del contacte</legend>
           <p>Només cal omplir-les si introdueixes una consulta d'un altre dia. Si les deixes buides, es guardarà la data d'avui.</p>
@@ -81,7 +108,13 @@ const modal = createModal();
 const content = modal.querySelector(".lead-entry-panel__content");
 function openModal() { content.innerHTML = renderSourceStep(); modal.classList.add("is-open"); modal.setAttribute("aria-hidden", "false"); document.body.classList.add("modal-open"); window.setTimeout(() => modal.querySelector("[data-entry-source]")?.focus(), 50); }
 function closeModal() { modal.classList.remove("is-open"); modal.setAttribute("aria-hidden", "true"); document.body.classList.remove("modal-open"); }
-function showForm(presetKey) { content.innerHTML = renderLeadForm(presetKey); content.querySelector("input[name='firstName']")?.focus(); }
+async function showForm(presetKey) {
+  content.innerHTML = `<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant etiquetes...</p></div>`;
+  try { tripsCache = await getTrips(); }
+  catch (error) { console.error("No s'han pogut carregar les etiquetes:", error); tripsCache = []; }
+  content.innerHTML = renderLeadForm(presetKey);
+  content.querySelector("input[name='firstName']")?.focus();
+}
 function setSavingState(form, saving) { const saveButton = form.querySelector("[data-save-lead]"); const cancelButton = form.querySelector("[data-entry-close]"); if (saveButton) { saveButton.disabled = saving; saveButton.textContent = saving ? "Guardant..." : "Guardar futura viatgera"; } if (cancelButton) cancelButton.disabled = saving; }
 
 document.addEventListener("click", (event) => {
@@ -102,6 +135,9 @@ document.addEventListener("submit", async (event) => {
   const message = form.querySelector("#quickLeadMessage");
   if (!form.checkValidity()) { form.reportValidity(); return; }
   const leadInput = Object.fromEntries(new FormData(form).entries());
+  const selectedTrips = [...form.querySelectorAll('input[name="tripIds"]:checked')];
+  leadInput.tripIds = JSON.stringify(selectedTrips.map((input) => input.value));
+  leadInput.tripLabels = JSON.stringify(selectedTrips.map((input) => input.dataset.tripLabel));
   message.classList.remove("is-error", "is-success"); message.textContent = ""; setSavingState(form, true);
   try {
     const lead = await createLead(leadInput);
