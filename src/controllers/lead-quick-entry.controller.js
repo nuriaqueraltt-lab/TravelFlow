@@ -22,6 +22,14 @@ function escapeHtml(value = "") {
   }[char]));
 }
 
+function normalizeText(value = "") {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function renderSourceStep() {
   const options = Object.entries(ENTRY_PRESETS).map(([key, preset]) => `
     <button class="entry-source-card" type="button" data-entry-source="${key}">
@@ -49,10 +57,21 @@ function renderChannelSpecificField(presetKey) {
 function renderTripOptions() {
   if (!tripsCache.length) return `<p class="lead-entry-trips__empty">Encara no hi ha etiquetes de viatge disponibles.</p>`;
   return tripsCache.map((trip) => `
-    <label class="lead-edit-trip">
+    <label class="lead-edit-trip" data-trip-option>
       <input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" />
       <span>${escapeHtml(trip.name)}</span>
     </label>`).join("");
+}
+
+function renderTripSearch() {
+  return `<label class="trip-tag-search">
+    <span class="trip-tag-search__label">Buscar etiqueta</span>
+    <span class="trip-tag-search__control">
+      <span aria-hidden="true">⌕</span>
+      <input type="search" placeholder="Escriu el nom del viatge..." autocomplete="off" data-trip-tag-search />
+    </span>
+  </label>
+  <p class="trip-tag-search__empty" data-trip-tag-search-empty hidden>No hi ha cap etiqueta que coincideixi amb la cerca.</p>`;
 }
 
 function renderLeadForm(presetKey) {
@@ -76,7 +95,8 @@ function renderLeadForm(presetKey) {
         <fieldset class="quick-lead-form__wide lead-edit-trips lead-entry-trips">
           <legend>Etiquetes de viatge</legend>
           <p>Selecciona un o diversos viatges d'interès. També pots deixar-ho sense etiqueta.</p>
-          <div>${renderTripOptions()}</div>
+          ${renderTripSearch()}
+          <div class="trip-tag-options-list">${renderTripOptions()}</div>
         </fieldset>
         <fieldset class="quick-lead-form__wide lead-entry-dates">
           <legend>Dates del contacte</legend>
@@ -92,6 +112,21 @@ function renderLeadForm(presetKey) {
       <p class="quick-lead-form__message" id="quickLeadMessage" role="status"></p>
     </form>
   </div>`;
+}
+
+function filterTripOptions(searchInput) {
+  const fieldset = searchInput.closest(".lead-edit-trips");
+  if (!fieldset) return;
+  const query = normalizeText(searchInput.value);
+  const options = [...fieldset.querySelectorAll("[data-trip-option]")];
+  let visible = 0;
+  options.forEach((option) => {
+    const matches = !query || normalizeText(option.textContent).includes(query);
+    option.hidden = !matches;
+    if (matches) visible += 1;
+  });
+  const empty = fieldset.querySelector("[data-trip-tag-search-empty]");
+  if (empty) empty.hidden = visible > 0;
 }
 
 function createModal() {
@@ -126,6 +161,10 @@ document.addEventListener("click", (event) => {
   if (sourceButton) { showForm(sourceButton.dataset.entrySource); return; }
   if (closeButton) { closeModal(); return; }
   if (backButton) content.innerHTML = renderSourceStep();
+});
+
+document.addEventListener("input", (event) => {
+  if (event.target.matches("#quickLeadForm [data-trip-tag-search]")) filterTripOptions(event.target);
 });
 
 document.addEventListener("submit", async (event) => {
