@@ -5,7 +5,6 @@ import {
   getDocs,
   serverTimestamp,
   Timestamp,
-  updateDoc,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -15,6 +14,7 @@ import { getCurrentUser } from "./auth.service.js";
 const TASK_TYPE = "NEXT_YEAR_INTEREST";
 const TASK_STATUS_PENDING = "PENDING";
 const TASK_STATUS_COMPLETED = "COMPLETED";
+const MAX_LEADS_PER_BATCH = 200;
 
 function mapDocument(snapshot) {
   return { id: snapshot.id, ...snapshot.data() };
@@ -30,6 +30,41 @@ function todayAtNine() {
   return Timestamp.fromDate(date);
 }
 
+async function commitMissingTasks(leads, user) {
+  const dueAt = todayAtNine();
+
+  for (let start = 0; start < leads.length; start += MAX_LEADS_PER_BATCH) {
+    const batch = writeBatch(db);
+    const group = leads.slice(start, start + MAX_LEADS_PER_BATCH);
+
+    group.forEach((lead) => {
+      batch.set(doc(db, "tasks", taskIdForLead(lead.id)), {
+        leadId: lead.id,
+        leadName: lead.fullName || "Futura viatgera",
+        tripName: Array.isArray(lead.tripLabels) ? lead.tripLabels.join(", ") : lead.interest || "",
+        title: "Preguntar si vol llista interessades proper any",
+        type: TASK_TYPE,
+        status: TASK_STATUS_PENDING,
+        automatic: true,
+        dueAt,
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      batch.set(doc(collection(db, "activities")), {
+        leadId: lead.id,
+        type: TASK_TYPE,
+        description: "El viatge ha finalitzat. Cal preguntar si vol entrar al llistat d’interessades del proper any.",
+        createdBy: user.uid,
+        createdAt: serverTimestamp()
+      });
+    });
+
+    await batch.commit();
+  }
+}
+
 export async function ensureExpiredLeadNextYearTasks() {
   const user = getCurrentUser();
   if (!user) return 0;
@@ -41,42 +76,15 @@ export async function ensureExpiredLeadNextYearTasks() {
 
   if (!expiredLeads.length) return 0;
 
-  const missing = [];
-  for (const lead of expiredLeads) {
+  const taskChecks = await Promise.all(expiredLeads.map(async (lead) => {
     const taskSnapshot = await getDoc(doc(db, "tasks", taskIdForLead(lead.id)));
-    if (!taskSnapshot.exists()) missing.push(lead);
-  }
+    return taskSnapshot.exists() ? null : lead;
+  }));
+  const missing = taskChecks.filter(Boolean);
 
   if (!missing.length) return 0;
 
-  const batch = writeBatch(db);
-  const dueAt = todayAtNine();
-
-  missing.forEach((lead) => {
-    batch.set(doc(db, "tasks", taskIdForLead(lead.id)), {
-      leadId: lead.id,
-      leadName: lead.fullName || "Futura viatgera",
-      tripName: Array.isArray(lead.tripLabels) ? lead.tripLabels.join(", ") : lead.interest || "",
-      title: "Preguntar si vol llista interessades proper any",
-      type: TASK_TYPE,
-      status: TASK_STATUS_PENDING,
-      automatic: true,
-      dueAt,
-      createdBy: user.uid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-
-    batch.set(doc(collection(db, "activities")), {
-      leadId: lead.id,
-      type: TASK_TYPE,
-      description: "El viatge ha finalitzat. Cal preguntar si vol entrar al llistat d’interessades del proper any.",
-      createdBy: user.uid,
-      createdAt: serverTimestamp()
-    });
-  });
-
-  await batch.commit();
+  await commitMissingTasks(missing, user);
   return missing.length;
 }
 
