@@ -1,6 +1,12 @@
 import { getLeadActivities, getLeadById, getLeadErrorMessage, getLeads, updateLead } from "../services/lead.service.js";
 import { getTrips } from "../services/trip.service.js";
 import {
+  addExpiredLeadToNextYear,
+  declineExpiredLeadNextYear,
+  ensureExpiredLeadNextYearTasks,
+  getExpiredLeadFollowUpError
+} from "../services/expired-lead-followup.service.js";
+import {
   confirmBooking,
   getLeadTasks,
   getWorkflowErrorMessage,
@@ -66,16 +72,27 @@ function renderEditForm(lead) {
   return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend><div>${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`;
 }
 
+function renderExpiredLeadBanner(lead, tasks) {
+  const pendingTask = tasks.find((task) => task.status === "PENDING" && task.type === "NEXT_YEAR_INTEREST");
+  if (!lead.lostAutomatically || !pendingTask) return "";
+  return `<section class="lead-action-panel"><div><span class="section-kicker">Viatge finalitzat</span><h2>Vols preguntar-li si vol viatjar l’any vinent?</h2><p>Aquest lead ha passat a perdut perquè el viatge ja ha finalitzat. Pots mantenir el contacte afegint-la a un viatge del proper any.</p></div><div class="lead-edit-actions"><button class="primary-button primary-button--compact" type="button" data-action="next-year">Afegir a interessades proper any</button><button class="secondary-button" type="button" data-action="decline-next-year">No està interessada</button></div></section>`;
+}
+
 function renderDetail(lead, activities, tasks) {
   const pending = tasks.find((task) => task.status === "PENDING");
   const trip = lead.tripLabels?.join(", ") || lead.interest || "Sense viatge";
-  return `<section class="lead-detail-page"><button class="lead-detail-back" type="button" data-back-to-leads>← Tornar</button><header class="lead-detail-hero"><div class="lead-detail-hero__avatar">${initials(lead.fullName)}</div><div class="lead-detail-hero__content"><span class="section-kicker">Futura viatgera</span><h1>${escapeHtml(lead.fullName)}</h1><div class="lead-detail-hero__meta"><span class="lead-channel lead-channel--${String(lead.channel).toLowerCase()}">${CHANNEL_LABELS[lead.channel]}</span><span>${escapeHtml(trip)}</span></div>${renderContactLinks(lead)}</div><button class="secondary-button" type="button" data-edit-lead>Editar dades i etiquetes</button></header><section id="leadEditPanel"></section><section class="lead-summary-grid"><article><span>Estat</span><strong>${STATUS_LABELS[lead.status] || lead.status}</strong></article><article><span>Viatge</span><strong>${escapeHtml(trip)}</strong></article><article><span>Pròxima acció</span><strong>${escapeHtml(pending?.title || lead.nextActionTitle || "Sense acció")}</strong></article><article><span>Data pròxima acció</span><strong>${formatDate(pending?.dueAt || lead.nextActionAt)}</strong></article><article><span>Sense resposta</span><strong>${Number(lead.noResponseCount || 0)} de 2</strong></article></section><section class="lead-quick-actions"><button data-action="contact">Afegir contacte</button><button data-action="replied">Ha contestat</button><button data-action="no-response">Sense resposta</button><button data-action="schedule">Programar seguiment</button><button data-action="booking">Reserva confirmada</button><button class="is-danger" data-action="lost">Marcar com a perdut</button></section><section class="lead-action-panel" id="leadActionPanel"></section><div class="lead-detail-grid"><article class="content-card lead-detail-card"><header><span class="section-kicker">Contacte</span><h2>Dades principals</h2></header><dl class="lead-data-list"><div><dt>Telèfon</dt><dd>${escapeHtml(lead.phone || "—")}</dd></div><div><dt>Correu</dt><dd>${escapeHtml(lead.email || "—")}</dd></div>${lead.instagramHandle ? `<div><dt>Instagram</dt><dd>${escapeHtml(lead.instagramHandle)}</dd></div>` : ""}${lead.facebookUrl ? `<div><dt>Facebook</dt><dd>Enllaç guardat</dd></div>` : ""}<div><dt>Canal</dt><dd>${CHANNEL_LABELS[lead.channel]}</dd></div><div><dt>Alta</dt><dd>${formatDate(lead.createdAt)}</dd></div></dl>${lead.notes ? `<div class="lead-notes"><span>Observacions</span><p>${escapeHtml(lead.notes)}</p></div>` : ""}</article><article class="content-card lead-detail-card"><header><span class="section-kicker">Historial complet</span><h2>Interaccions comercials</h2></header><div class="timeline">${renderTimeline(activities, tasks)}</div></article></div></section>`;
+  return `<section class="lead-detail-page"><button class="lead-detail-back" type="button" data-back-to-leads>← Tornar</button><header class="lead-detail-hero"><div class="lead-detail-hero__avatar">${initials(lead.fullName)}</div><div class="lead-detail-hero__content"><span class="section-kicker">Futura viatgera</span><h1>${escapeHtml(lead.fullName)}</h1><div class="lead-detail-hero__meta"><span class="lead-channel lead-channel--${String(lead.channel).toLowerCase()}">${CHANNEL_LABELS[lead.channel]}</span><span>${escapeHtml(trip)}</span></div>${renderContactLinks(lead)}</div><button class="secondary-button" type="button" data-edit-lead>Editar dades i etiquetes</button></header>${renderExpiredLeadBanner(lead, tasks)}<section id="leadEditPanel"></section><section class="lead-summary-grid"><article><span>Estat</span><strong>${STATUS_LABELS[lead.status] || lead.status}</strong></article><article><span>Viatge</span><strong>${escapeHtml(trip)}</strong></article><article><span>Pròxima acció</span><strong>${escapeHtml(pending?.title || lead.nextActionTitle || "Sense acció")}</strong></article><article><span>Data pròxima acció</span><strong>${formatDate(pending?.dueAt || lead.nextActionAt)}</strong></article><article><span>Sense resposta</span><strong>${Number(lead.noResponseCount || 0)} de 2</strong></article></section><section class="lead-quick-actions"><button data-action="contact">Afegir contacte</button><button data-action="replied">Ha contestat</button><button data-action="no-response">Sense resposta</button><button data-action="schedule">Programar seguiment</button><button data-action="booking">Reserva confirmada</button><button class="is-danger" data-action="lost">Marcar com a perdut</button></section><section class="lead-action-panel" id="leadActionPanel"></section><div class="lead-detail-grid"><article class="content-card lead-detail-card"><header><span class="section-kicker">Contacte</span><h2>Dades principals</h2></header><dl class="lead-data-list"><div><dt>Telèfon</dt><dd>${escapeHtml(lead.phone || "—")}</dd></div><div><dt>Correu</dt><dd>${escapeHtml(lead.email || "—")}</dd></div>${lead.instagramHandle ? `<div><dt>Instagram</dt><dd>${escapeHtml(lead.instagramHandle)}</dd></div>` : ""}${lead.facebookUrl ? `<div><dt>Facebook</dt><dd>Enllaç guardat</dd></div>` : ""}<div><dt>Canal</dt><dd>${CHANNEL_LABELS[lead.channel]}</dd></div><div><dt>Alta</dt><dd>${formatDate(lead.createdAt)}</dd></div></dl>${lead.notes ? `<div class="lead-notes"><span>Observacions</span><p>${escapeHtml(lead.notes)}</p></div>` : ""}</article><article class="content-card lead-detail-card"><header><span class="section-kicker">Historial complet</span><h2>Interaccions comercials</h2></header><div class="timeline">${renderTimeline(activities, tasks)}</div></article></div></section>`;
 }
 
 function renderActionForm(action) {
   if (action === "contact") return `<form class="lead-inline-form" data-form="contact"><label>Interacció o nota<textarea name="description" required placeholder="Ex. Informació enviada per WhatsApp"></textarea></label><label>Estat<select name="status"><option value="INFO_SENT">Informació enviada</option><option value="FOLLOW_UP">En seguiment</option><option value="PENDING_DECISION">Pendent de decisió</option></select></label><button class="primary-button primary-button--compact">Guardar contacte</button></form>`;
   if (action === "schedule") return `<form class="lead-inline-form" data-form="schedule"><label>Pròxima acció<input name="title" required placeholder="Ex. Trucar clienta" /></label><label>Data<input name="dueAt" type="date" required /></label><button class="primary-button primary-button--compact">Programar</button></form>`;
   if (action === "lost") return `<form class="lead-inline-form" data-form="lost"><label>Motiu obligatori<select name="reason" required><option value="">Selecciona...</option>${Object.entries(LOST_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label>Observacions<textarea name="note"></textarea></label><button class="primary-button primary-button--compact">Confirmar pèrdua</button></form>`;
+  if (action === "next-year") {
+    const nextYear = new Date().getFullYear() + 1;
+    const options = tripsCache.filter((trip) => Number(trip.year) >= nextYear).map((trip) => `<option value="${trip.id}">${escapeHtml(trip.name)}</option>`).join("");
+    return `<form class="lead-inline-form" data-form="next-year"><label>Viatge del proper any<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label><div></div><button class="primary-button primary-button--compact">Afegir a la llista</button></form>`;
+  }
   return "";
 }
 
@@ -86,14 +103,32 @@ async function refreshDetail() {
   root().innerHTML = renderDetail(lead, activities, tasks);
 }
 
-export async function showLeadsView() { root().innerHTML = loading(); try { leadsCache = await getLeads(); root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
+export async function showLeadsView() {
+  root().innerHTML = loading();
+  try {
+    leadsCache = await getLeads();
+    await ensureExpiredLeadNextYearTasks();
+    root().innerHTML = renderList(leadsCache);
+  } catch (error) {
+    root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`;
+  }
+}
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 function filterRows() { const search = document.querySelector("#leadsSearch")?.value.toLowerCase().trim() || ""; const channel = document.querySelector("#leadsChannelFilter")?.value || ""; const filtered = leadsCache.filter((lead) => (!channel || lead.channel === channel) && (!search || [lead.fullName, lead.phone, lead.email, lead.instagramHandle, lead.interest, ...(lead.tripLabels || [])].join(" ").toLowerCase().includes(search))); document.querySelector("#leadsRows").innerHTML = renderRows(filtered); document.querySelector("#leadsCount").textContent = filtered.length; }
 
 async function runQuickAction(action) {
   const lead = await getLeadById(currentLeadId);
-  if (["contact", "schedule", "lost"].includes(action)) { document.querySelector("#leadActionPanel").innerHTML = renderActionForm(action); return; }
-  try { if (action === "replied") await markReplied(lead); if (action === "no-response") await markNoResponse(lead); if (action === "booking" && window.confirm("Confirmes que la reserva està confirmada?")) await confirmBooking(lead); await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated")); } catch (error) { window.alert(getWorkflowErrorMessage(error)); }
+  if (["contact", "schedule", "lost", "next-year"].includes(action)) { document.querySelector("#leadActionPanel").innerHTML = renderActionForm(action); return; }
+  try {
+    if (action === "replied") await markReplied(lead);
+    if (action === "no-response") await markNoResponse(lead);
+    if (action === "booking" && window.confirm("Confirmes que la reserva està confirmada?")) await confirmBooking(lead);
+    if (action === "decline-next-year" && window.confirm("Confirmes que no vol entrar al llistat del proper any?")) await declineExpiredLeadNextYear(lead.id);
+    await refreshDetail();
+    window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
+  } catch (error) {
+    window.alert(action === "decline-next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error));
+  }
 }
 
 document.addEventListener("click", async (event) => {
@@ -114,6 +149,7 @@ document.addEventListener("submit", async (event) => {
     if (formType === "contact") await recordManualContact({ lead, description: data.description, status: data.status });
     if (formType === "schedule") await scheduleManualFollowUp({ lead, title: data.title, dueAt: data.dueAt });
     if (formType === "lost") await markLeadLost({ lead, reason: data.reason, note: data.note });
+    if (formType === "next-year") await addExpiredLeadToNextYear({ leadId: currentLeadId, tripId: data.tripId });
     if (formType === "edit") {
       const selected = [...event.target.querySelectorAll('input[name="tripIds"]:checked')];
       data.tripIds = JSON.stringify(selected.map((input) => input.value));
@@ -121,6 +157,6 @@ document.addEventListener("submit", async (event) => {
       await updateLead(currentLeadId, data);
     }
     await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
-  } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : getWorkflowErrorMessage(error)); }
+  } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : formType === "next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error)); }
 });
 window.addEventListener("travelflow:lead-created", (event) => { if (event.detail?.id) showLeadDetail(event.detail.id); });
