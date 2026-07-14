@@ -19,6 +19,15 @@ function safeImageUrl(value = "", seed = "travel") {
   return `https://picsum.photos/seed/${encodeURIComponent(seed)}/1000/700`;
 }
 
+async function runOptionalStep(label, callback) {
+  try {
+    return await callback();
+  } catch (error) {
+    console.warn(`[TravelFlow] ${label} no s'ha pogut completar, però el Dashboard continuarà carregant.`, error);
+    return null;
+  }
+}
+
 function renderTask(task, todayStart, todayEnd) {
   const due = toDate(task.dueAt);
   const overdue = due && due < todayStart;
@@ -105,12 +114,21 @@ function renderDashboard(tasks, trips, leads) {
 export async function showDailyDashboard() {
   if (!root()) return;
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
+
   try {
-    await importLegacyLeadsOnce();
-    await importLegacyLast55Once();
+    await runOptionalStep("Importació històrica principal", importLegacyLeadsOnce);
+    await runOptionalStep("Importació històrica complementària", importLegacyLast55Once);
+
     const leads = await getLeads();
-    await ensureExpiredLeadNextYearTasks();
-    const [tasks, trips] = await Promise.all([getOpenTasks(), getTrips()]);
+    await runOptionalStep("Creació de seguiments de proper any", ensureExpiredLeadNextYearTasks);
+
+    const [tasksResult, tripsResult] = await Promise.allSettled([getOpenTasks(), getTrips()]);
+    const tasks = tasksResult.status === "fulfilled" ? tasksResult.value : [];
+    const trips = tripsResult.status === "fulfilled" ? tripsResult.value : [];
+
+    if (tasksResult.status === "rejected") console.error("No s'han pogut carregar les tasques del Dashboard:", tasksResult.reason);
+    if (tripsResult.status === "rejected") console.error("No s'han pogut carregar els viatges del Dashboard:", tripsResult.reason);
+
     root().innerHTML = renderDashboard(tasks, trips, leads);
   } catch (error) {
     console.error("No s'ha pogut preparar el Dashboard:", error);
