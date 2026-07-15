@@ -4,8 +4,11 @@ import { getLeads } from "../services/lead.service.js";
 import { showLeadDetail } from "./leads.controller.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
 
+const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
 let dashboardLoading = false;
 let dashboardLoaded = false;
+let dashboardData = null;
+let dashboardDataAt = 0;
 
 function root() { return document.querySelector(".app-content"); }
 function startOfDay(date = new Date()) { const value = new Date(date); value.setHours(0, 0, 0, 0); return value; }
@@ -52,17 +55,26 @@ function renderDashboard(tasks, trips, leads) {
 export async function showDailyDashboard({ force = false } = {}) {
   if (!root() || dashboardLoading) return;
   if (!force && dashboardLoaded && document.querySelector(".daily-dashboard")) return;
+  const cacheValid = dashboardData && Date.now() - dashboardDataAt < DASHBOARD_CACHE_TTL;
+  if (!force && cacheValid) {
+    root().innerHTML = renderDashboard(dashboardData.tasks, dashboardData.trips, dashboardData.leads);
+    dashboardLoaded = true;
+    return;
+  }
+
   dashboardLoading = true;
   window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Dashboard" } }));
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
   try {
-    const [leads, trips] = await Promise.all([getLeads(), getTrips()]);
+    const [leads, trips] = await Promise.all([getLeads({ force }), getTrips({ force })]);
     const tasks = await getOpenTasks({ leads, trips, runMaintenance: false });
+    dashboardData = { leads, trips, tasks };
+    dashboardDataAt = Date.now();
     root().innerHTML = renderDashboard(tasks, trips, leads);
     dashboardLoaded = true;
   } catch (error) {
     console.error("No s'ha pogut preparar el Dashboard:", error);
-    root().innerHTML = `<div class="leads-error">No s'ha pogut carregar el Dashboard. Si avui s'ha superat la quota de Firebase, tornarà a funcionar quan es renovi.</div>`;
+    root().innerHTML = `<div class="leads-error">No s'ha pogut carregar el Dashboard.</div>`;
   } finally {
     dashboardLoading = false;
   }
@@ -70,8 +82,9 @@ export async function showDailyDashboard({ force = false } = {}) {
 
 document.addEventListener("click", (event) => {
   const nav = event.target.closest(".sidebar-nav__item");
-  if (nav?.textContent.trim().startsWith("Dashboard")) { showDailyDashboard({ force: true }); return; }
-  if (event.target.closest("[data-back-dashboard], [data-refresh-dashboard]")) { showDailyDashboard({ force: true }); return; }
+  if (nav?.textContent.trim().startsWith("Dashboard")) { showDailyDashboard(); return; }
+  if (event.target.closest("[data-back-dashboard]")) { showDailyDashboard(); return; }
+  if (event.target.closest("[data-refresh-dashboard]")) { showDailyDashboard({ force: true }); return; }
   const task = event.target.closest("[data-dashboard-lead]");
   if (task) { showLeadDetail(task.dataset.dashboardLead); return; }
   const trip = event.target.closest("[data-dashboard-trip]");
