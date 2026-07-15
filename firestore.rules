@@ -80,7 +80,7 @@ service cloud.firestore {
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.active == resource.data.active);
 
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /activities/{activityId} {
@@ -88,7 +88,8 @@ service cloud.firestore {
       allow create: if isStaff()
         && createdByCurrentUser()
         && request.resource.data.leadId is string;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     match /tasks/{taskId} {
@@ -105,7 +106,7 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.type == resource.data.type);
 
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /trips/{tripId} {
