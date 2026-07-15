@@ -13,15 +13,16 @@ import { getCurrentUser } from "../services/auth.service.js";
 
 const TERMINAL_STATUSES = new Set(["LOST", "BOOKING_CONFIRMED"]);
 let running = false;
-let rerunRequested = false;
+let cleanupTimer = null;
+let initialCleanupDone = false;
+
+function currentDetailIsTerminal() {
+  const status = document.querySelector(".lead-detail-page .lead-summary-grid > article:first-child strong")?.textContent?.trim();
+  return status === "Perdut" || status === "Reserva confirmada";
+}
 
 async function cleanupTerminalLeadTasks() {
-  if (running) {
-    rerunRequested = true;
-    return;
-  }
-
-  if (!getCurrentUser()) return;
+  if (running || !getCurrentUser()) return;
   running = true;
 
   try {
@@ -34,29 +35,22 @@ async function cleanupTerminalLeadTasks() {
     leadsSnapshot.docs.forEach((leadDoc) => {
       const lead = leadDoc.data();
       if (lead.active !== false && TERMINAL_STATUSES.has(lead.status)) {
-        terminalLeads.set(leadDoc.id, { ref: leadDoc.ref, status: lead.status });
+        terminalLeads.set(leadDoc.id, { ref: leadDoc.ref, status: lead.status, data: lead });
       }
     });
 
+    const pendingTasks = tasksSnapshot.docs.filter((taskDoc) => terminalLeads.has(taskDoc.data().leadId));
+    const staleLeads = [...terminalLeads.entries()].filter(([, lead]) => lead.data.nextActionAt || lead.data.nextActionTitle);
+
+    if (!pendingTasks.length && !staleLeads.length) return;
+
     const affectedLeadIds = new Set();
-    const pendingTasks = tasksSnapshot.docs.filter((taskDoc) => {
-      const leadId = taskDoc.data().leadId;
-      if (!terminalLeads.has(leadId)) return false;
-      affectedLeadIds.add(leadId);
-      return true;
-    });
-
-    const leadsWithStaleNextAction = [...terminalLeads.entries()].filter(([, lead]) => {
-      const data = leadsSnapshot.docs.find((item) => item.ref.path === lead.ref.path)?.data();
-      return Boolean(data?.nextActionAt || data?.nextActionTitle);
-    });
-
-    if (!pendingTasks.length && !leadsWithStaleNextAction.length) return;
-
     const operations = [];
 
     pendingTasks.forEach((taskDoc) => {
-      const leadStatus = terminalLeads.get(taskDoc.data().leadId)?.status;
+      const leadId = taskDoc.data().leadId;
+      const leadStatus = terminalLeads.get(leadId)?.status;
+      affectedLeadIds.add(leadId);
       operations.push((batch) => batch.update(taskDoc.ref, {
         status: "CANCELLED",
         cancelledReason: leadStatus === "LOST" ? "LEAD_LOST" : "BOOKING_CONFIRMED",
@@ -65,8 +59,8 @@ async function cleanupTerminalLeadTasks() {
       }));
     });
 
-    terminalLeads.forEach((lead, leadId) => {
-      if (!affectedLeadIds.has(leadId) && !leadsWithStaleNextAction.some(([id]) => id === leadId)) return;
+    staleLeads.forEach(([leadId]) => affectedLeadIds.add(leadId));
+    affectedLeadIds.forEach((leadId) => {
       operations.push((batch) => batch.update(doc(db, "leads", leadId), {
         nextActionTitle: "",
         nextActionAt: null,
@@ -83,24 +77,23 @@ async function cleanupTerminalLeadTasks() {
     window.dispatchEvent(new CustomEvent("travelflow:terminal-tasks-cleaned", {
       detail: { tasks: pendingTasks.length, leads: affectedLeadIds.size }
     }));
-    window.dispatchEvent(new CustomEvent("travelflow:tasks-updated", {
-      detail: { source: "terminal-lead-cleanup" }
-    }));
   } catch (error) {
     console.error("No s'han pogut cancel·lar les tasques dels leads tancats:", error);
   } finally {
     running = false;
-    if (rerunRequested) {
-      rerunRequested = false;
-      window.setTimeout(cleanupTerminalLeadTasks, 100);
-    }
   }
 }
 
-window.addEventListener("travelflow:user-ready", cleanupTerminalLeadTasks);
-window.addEventListener("travelflow:tasks-updated", (event) => {
-  if (event.detail?.source === "terminal-lead-cleanup") return;
-  cleanupTerminalLeadTasks();
+function scheduleCleanup(force = false) {
+  if (!force && !currentDetailIsTerminal()) return;
+  window.clearTimeout(cleanupTimer);
+  cleanupTimer = window.setTimeout(cleanupTerminalLeadTasks, 120);
+}
+
+window.addEventListener("travelflow:user-ready", () => {
+  if (initialCleanupDone) return;
+  initialCleanupDone = true;
+  scheduleCleanup(true);
 });
 
-cleanupTerminalLeadTasks();
+window.addEventListener("travelflow:tasks-updated", () => scheduleCleanup(false));
