@@ -76,14 +76,15 @@ async function runExpiredLeadMaintenance() {
   const [leadSnapshot, taskSnapshot] = await Promise.all([
     getDocs(query(
       collection(db, "leads"),
-      where("active", "==", true),
       where("status", "==", "LOST"),
       where("lostAutomatically", "==", true)
     )),
     getDocs(query(collection(db, "tasks"), where("type", "==", TASK_TYPE)))
   ]);
 
-  const expiredLeads = leadSnapshot.docs.map(mapDocument);
+  const expiredLeads = leadSnapshot.docs
+    .map(mapDocument)
+    .filter((lead) => lead.active !== false);
   if (!expiredLeads.length) return 0;
 
   const leadsWithTask = new Set(
