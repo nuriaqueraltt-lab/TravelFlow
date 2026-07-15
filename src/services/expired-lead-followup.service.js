@@ -15,6 +15,8 @@ const TASK_TYPE = "NEXT_YEAR_INTEREST";
 const TASK_STATUS_PENDING = "PENDING";
 const TASK_STATUS_COMPLETED = "COMPLETED";
 const MAX_LEADS_PER_BATCH = 200;
+const MAINTENANCE_SESSION_KEY = "travelflow:expired-lead-followup-checked";
+let maintenanceRequest = null;
 
 function mapDocument(snapshot) {
   return { id: snapshot.id, ...snapshot.data() };
@@ -65,7 +67,7 @@ async function commitMissingTasks(leads, user) {
   }
 }
 
-export async function ensureExpiredLeadNextYearTasks() {
+async function runExpiredLeadMaintenance() {
   const user = getCurrentUser();
   if (!user) return 0;
 
@@ -86,6 +88,22 @@ export async function ensureExpiredLeadNextYearTasks() {
 
   await commitMissingTasks(missing, user);
   return missing.length;
+}
+
+export async function ensureExpiredLeadNextYearTasks({ force = false } = {}) {
+  if (!force && sessionStorage.getItem(MAINTENANCE_SESSION_KEY) === "done") return 0;
+  if (!force && maintenanceRequest) return maintenanceRequest;
+
+  maintenanceRequest = runExpiredLeadMaintenance()
+    .then((count) => {
+      sessionStorage.setItem(MAINTENANCE_SESSION_KEY, "done");
+      return count;
+    })
+    .finally(() => {
+      maintenanceRequest = null;
+    });
+
+  return maintenanceRequest;
 }
 
 export async function addExpiredLeadToNextYear({ leadId, tripId }) {
