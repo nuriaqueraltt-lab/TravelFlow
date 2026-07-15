@@ -130,10 +130,14 @@ export async function scheduleManualFollowUp({ lead, title, dueAt, status = LEAD
 
 export async function markReplied(lead) {
   const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  const title = "Seguiment després de resposta";
+  const dueAt = Timestamp.fromDate(addDays(new Date(), Math.max(3, FOLLOW_UP_DEFAULTS.SECOND_DAYS)));
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
-  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.REPLIED, description: "La futura viatgera ha contestat.", createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.REPLIED, nextActionAt: null, nextActionTitle: "", lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.REPLIED, description: "La futura viatgera ha contestat. Seguiment programat automàticament.", createdBy: user.uid, createdAt: serverTimestamp() });
+  batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title, type: TASK_TYPES.SECOND_FOLLOW_UP, status: TASK_STATUSES.PENDING, automatic: true, dueAt, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.REPLIED, nextActionAt: dueAt, nextActionTitle: title, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch);
+  return { nextActionTitle: title, nextActionAt: dueAt };
 }
 
 export async function markNoResponse(lead) {
@@ -142,7 +146,7 @@ export async function markNoResponse(lead) {
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NO_RESPONSE, description: noResponseCount === 1 ? "Primer seguiment sense resposta." : `${noResponseCount} seguiments sense resposta.`, createdBy: user.uid, createdAt: serverTimestamp() });
   const isFinalReview = noResponseCount >= FOLLOW_UP_DEFAULTS.MAX_NO_RESPONSE;
-  const days = isFinalReview ? FOLLOW_UP_DEFAULTS.FINAL_REVIEW_DAYS : FOLLOW_UP_DEFAULTS.SECOND_DAYS;
+  const days = Math.max(3, isFinalReview ? FOLLOW_UP_DEFAULTS.FINAL_REVIEW_DAYS : FOLLOW_UP_DEFAULTS.SECOND_DAYS);
   const title = isFinalReview ? "Revisió final sense resposta" : "Segon seguiment pendent";
   const dueAt = Timestamp.fromDate(addDays(new Date(), days));
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title, type: isFinalReview ? TASK_TYPES.FINAL_REVIEW : TASK_TYPES.SECOND_FOLLOW_UP, status: TASK_STATUSES.PENDING, automatic: true, sequence: noResponseCount + 1, dueAt, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
