@@ -18,27 +18,18 @@ function renderLoginView() {
 
         <header class="login-visual__brand">
           ${renderBrandMark()}
-          <div>
-            <strong>TravelFlow</strong>
-            <span>Dones i Viatgeres</span>
-          </div>
+          <div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div>
         </header>
 
         <div class="login-visual__content">
           <span class="login-visual__eyebrow">Gestió comercial amb ànima viatgera</span>
           <h1>Cap futura viatgera sense resposta.</h1>
-          <p>
-            Centralitza els leads, prioritza els seguiments i acompanya cada
-            persona des del primer missatge fins a la reserva.
-          </p>
+          <p>Centralitza els leads, prioritza els seguiments i acompanya cada persona des del primer missatge fins a la reserva.</p>
         </div>
 
         <div class="login-visual__insight">
           <div class="login-visual__insight-icon" aria-hidden="true">✦</div>
-          <div>
-            <span>La teva prioritat d'avui</span>
-            <strong>3 viatgeres esperen seguiment</strong>
-          </div>
+          <div><span>El teu espai comercial</span><strong>Organitzat, clar i sempre al dia</strong></div>
         </div>
       </section>
 
@@ -46,10 +37,7 @@ function renderLoginView() {
         <div class="login-panel__inner">
           <div class="login-panel__mobile-brand">
             ${renderBrandMark()}
-            <div>
-              <strong>TravelFlow</strong>
-              <span>Dones i Viatgeres</span>
-            </div>
+            <div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div>
           </div>
 
           <div class="login-panel__heading">
@@ -62,10 +50,7 @@ function renderLoginView() {
             <label class="form-field">
               <span>Correu electrònic</span>
               <div class="form-control">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 6h16v12H4z" />
-                  <path d="m4 7 8 6 8-6" />
-                </svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z" /><path d="m4 7 8 6 8-6" /></svg>
                 <input type="email" name="email" autocomplete="email" placeholder="nom@donesiviatgeres.com" required />
               </div>
             </label>
@@ -73,43 +58,27 @@ function renderLoginView() {
             <label class="form-field">
               <span>Contrasenya</span>
               <div class="form-control">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="5" y="10" width="14" height="10" rx="2" />
-                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                </svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
                 <input id="passwordInput" type="password" name="password" autocomplete="current-password" placeholder="Introdueix la teva contrasenya" required />
                 <button class="password-toggle" id="passwordToggle" type="button" aria-label="Mostrar la contrasenya">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                    <circle cx="12" cy="12" r="2.5" />
-                  </svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
                 </button>
               </div>
             </label>
 
             <div class="login-form__options">
-              <label class="checkbox-field">
-                <input type="checkbox" name="remember" />
-                <span>Recorda'm</span>
-              </label>
+              <label class="checkbox-field"><input type="checkbox" name="remember" /><span>Recorda'm</span></label>
               <button class="link-button" type="button">He oblidat la contrasenya</button>
             </div>
 
             <button class="primary-button" type="submit">
               <span>Entrar a TravelFlow</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 12h14" />
-                <path d="m14 7 5 5-5 5" />
-              </svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></svg>
             </button>
-
             <p class="login-form__message" id="loginMessage" role="status"></p>
           </form>
 
-          <footer class="login-panel__footer">
-            <span>Ús intern de Dones i Viatgeres</span>
-            <span>TravelFlow · 2026</span>
-          </footer>
+          <footer class="login-panel__footer"><span>Ús intern de Dones i Viatgeres</span><span>TravelFlow · 2026</span></footer>
         </div>
       </section>
     </main>
@@ -125,140 +94,22 @@ function renderIcon(name) {
     tasks: '<path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />',
     settings: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09a1.7 1.7 0 0 0-1.1-1.51 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.34.7.6 1 .3.28.68.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" />'
   };
-
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 }
 
 function renderSidebarItem({ icon, label, active = false, soon = false }) {
-  return `
-    <button class="sidebar-nav__item ${active ? "is-active" : ""}" type="button" ${soon ? "disabled" : ""}>
-      ${renderIcon(icon)}
-      <span>${label}</span>
-      ${soon ? '<small>Properament</small>' : ""}
-    </button>
-  `;
+  return `<button class="sidebar-nav__item ${active ? "is-active" : ""}" type="button" ${soon ? "disabled" : ""}>${renderIcon(icon)}<span>${label}</span>${soon ? '<small>Properament</small>' : ""}</button>`;
 }
 
-function renderDashboardView() {
-  return `
-    <section class="dashboard-view">
-      <header class="page-heading">
-        <div>
-          <span class="section-kicker">Dimarts, 14 de juliol</span>
-          <h1>Bon dia, Núria</h1>
-          <p>Tens 5 futures viatgeres esperant una resposta. Comencem?</p>
-        </div>
-        <button class="primary-button primary-button--compact" type="button">+ Nou lead</button>
-      </header>
-
-      <section class="assistant-card">
-        <div class="assistant-card__icon">✦</div>
-        <div class="assistant-card__content">
-          <span>Assistent TravelFlow</span>
-          <h2>Avui començaria per tres seguiments prioritaris.</h2>
-          <p>Hi ha dues viatgeres amb alta intenció de reserva i una consulta nova sense respondre.</p>
-        </div>
-        <button class="assistant-card__button" type="button">Veure propostes</button>
-      </section>
-
-      <section class="metrics-grid" aria-label="Resum del dia">
-        <article class="metric-card">
-          <span class="metric-card__label">Leads nous</span>
-          <strong>12</strong>
-          <small>+4 aquesta setmana</small>
-        </article>
-        <article class="metric-card">
-          <span class="metric-card__label">Seguiments d'avui</span>
-          <strong>7</strong>
-          <small>3 són prioritaris</small>
-        </article>
-        <article class="metric-card metric-card--warning">
-          <span class="metric-card__label">Seguiments vençuts</span>
-          <strong>3</strong>
-          <small>Necessiten atenció</small>
-        </article>
-        <article class="metric-card">
-          <span class="metric-card__label">Reserves iniciades</span>
-          <strong>5</strong>
-          <small>2 pendents de confirmació</small>
-        </article>
-      </section>
-
-      <section class="dashboard-grid">
-        <article class="content-card">
-          <header class="content-card__header">
-            <div>
-              <span class="section-kicker">Prioritats</span>
-              <h2>Accions pendents</h2>
-            </div>
-            <button class="link-button" type="button">Veure totes</button>
-          </header>
-
-          <div class="action-list">
-            <article class="action-item">
-              <div class="action-item__avatar">MG</div>
-              <div class="action-item__content">
-                <strong>Maria Garcia</strong>
-                <span>Irlanda 2027 · informació enviada fa 3 dies</span>
-              </div>
-              <span class="status-badge status-badge--danger">Avui</span>
-            </article>
-            <article class="action-item">
-              <div class="action-item__avatar">CR</div>
-              <div class="action-item__content">
-                <strong>Cristina Ruiz</strong>
-                <span>Noruega · pendent confirmar preu dels vols</span>
-              </div>
-              <span class="status-badge status-badge--warning">Prioritari</span>
-            </article>
-            <article class="action-item">
-              <div class="action-item__avatar">PM</div>
-              <div class="action-item__content">
-                <strong>Paula Martínez</strong>
-                <span>Nova York · consulta nova d'Instagram</span>
-              </div>
-              <span class="status-badge status-badge--success">Nou</span>
-            </article>
-          </div>
-        </article>
-
-        <article class="content-card travel-interest-card">
-          <header class="content-card__header">
-            <div>
-              <span class="section-kicker">Interès</span>
-              <h2>Viatges destacats</h2>
-            </div>
-          </header>
-
-          <div class="interest-list">
-            <div class="interest-item">
-              <div><strong>Irlanda 2027</strong><span>18 interessades</span></div>
-              <div class="interest-bar"><span style="width: 88%"></span></div>
-            </div>
-            <div class="interest-item">
-              <div><strong>Noruega</strong><span>12 interessades</span></div>
-              <div class="interest-bar"><span style="width: 66%"></span></div>
-            </div>
-            <div class="interest-item">
-              <div><strong>Nova York</strong><span>9 interessades</span></div>
-              <div class="interest-bar"><span style="width: 52%"></span></div>
-            </div>
-          </div>
-        </article>
-      </section>
-    </section>
-  `;
+function renderAppLoading() {
+  return `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant el teu espai de treball...</p></div></section>`;
 }
 
 function renderAppShell() {
   return `
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar__brand">
-          ${renderBrandMark()}
-          <div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div>
-        </div>
-
+        <div class="sidebar__brand">${renderBrandMark()}<div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div></div>
         <nav class="sidebar-nav" aria-label="Navegació principal">
           <span class="sidebar-nav__label">Espai de treball</span>
           ${renderSidebarItem({ icon: "dashboard", label: "Dashboard", active: true })}
@@ -269,10 +120,9 @@ function renderAppShell() {
           <span class="sidebar-nav__label sidebar-nav__label--secondary">Sistema</span>
           ${renderSidebarItem({ icon: "settings", label: "Configuració", soon: true })}
         </nav>
-
         <footer class="sidebar-user">
-          <div class="sidebar-user__avatar">NQ</div>
-          <div><strong>Núria Queralt</strong><span>Administració</span></div>
+          <div class="sidebar-user__avatar" aria-hidden="true">··</div>
+          <div><strong>Carregant usuària...</strong><span>Preparant accés</span></div>
           <button type="button" aria-label="Més opcions">•••</button>
         </footer>
       </aside>
@@ -286,17 +136,11 @@ function renderAppShell() {
             <kbd>⌘ K</kbd>
           </div>
           <div class="topbar-actions">
-            <button class="icon-button" type="button" aria-label="Notificacions">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg>
-              <span></span>
-            </button>
-            <div class="topbar-profile"><div>NQ</div><span>Núria</span></div>
+            <button class="icon-button" type="button" aria-label="Notificacions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg><span></span></button>
+            <div class="topbar-profile"><div aria-hidden="true">··</div><span>Carregant...</span></div>
           </div>
         </header>
-
-        <main class="app-content">
-          ${renderDashboardView()}
-        </main>
+        <main class="app-content">${renderAppLoading()}</main>
       </section>
       <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="Tancar menú"></button>
     </div>
@@ -307,7 +151,6 @@ function setupShellInteractions() {
   const sidebar = document.querySelector("#sidebar");
   const menuToggle = document.querySelector("#menuToggle");
   const backdrop = document.querySelector("#sidebarBackdrop");
-
   const closeSidebar = () => document.body.classList.remove("sidebar-open");
   menuToggle?.addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
   backdrop?.addEventListener("click", closeSidebar);
@@ -335,23 +178,17 @@ function setupLoginInteractions() {
 
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
-
     if (!form.checkValidity()) {
       form.reportValidity();
       return;
     }
-
     showAppShell();
   });
 }
 
 function bootstrap() {
   const appRoot = document.querySelector("#app");
-
-  if (!appRoot) {
-    throw new Error("No s'ha trobat el contenidor principal de TravelFlow.");
-  }
-
+  if (!appRoot) throw new Error("No s'ha trobat el contenidor principal de TravelFlow.");
   appRoot.innerHTML = renderLoginView();
   setupLoginInteractions();
 }
