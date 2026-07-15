@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isPrimaryAdminEmail() {
+      return signedIn() && request.auth.token.email == 'nuria.queraltt@gmail.com';
+    }
+
     function userPath(userId) {
       return /databases/$(database)/documents/users/$(userId);
     }
@@ -26,7 +30,8 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return hasActiveProfile() && userProfile().data.role == 'ADMIN';
+      return isPrimaryAdminEmail()
+        || (hasActiveProfile() && userProfile().data.role == 'ADMIN');
     }
 
     function isCommercial() {
@@ -43,7 +48,7 @@ service cloud.firestore {
 
     function isInitialAdminBootstrap(userId) {
       return isOwnUser(userId)
-        && request.auth.token.email == 'nuria.queraltt@gmail.com'
+        && isPrimaryAdminEmail()
         && request.resource.data.email == 'nuria.queraltt@gmail.com'
         && request.resource.data.role == 'ADMIN'
         && request.resource.data.active == true;
