@@ -2,7 +2,8 @@ const SECTION_KEYS = Object.freeze({
   Dashboard: "dashboard",
   Leads: "leads",
   Viatges: "trips",
-  Analítica: "analytics"
+  Analítica: "analytics",
+  Configuració: "settings"
 });
 
 let currentSection = "Dashboard";
