@@ -2,6 +2,7 @@ import { suspendLeadsWaitingForTripDates } from "../services/trip-interest-follo
 
 let running = false;
 let scheduled = false;
+let initialSyncDone = false;
 
 async function syncPendingTripDates() {
   if (running) {
@@ -23,13 +24,17 @@ async function syncPendingTripDates() {
     running = false;
     if (scheduled) {
       scheduled = false;
-      window.setTimeout(syncPendingTripDates, 100);
+      window.setTimeout(syncPendingTripDates, 150);
     }
   }
 }
 
-window.addEventListener("travelflow:user-ready", syncPendingTripDates);
-window.addEventListener("travelflow:lead-created", syncPendingTripDates);
-window.addEventListener("travelflow:tasks-updated", syncPendingTripDates);
+window.addEventListener("travelflow:user-ready", () => {
+  if (initialSyncDone) return;
+  initialSyncDone = true;
+  syncPendingTripDates();
+});
 
-syncPendingTripDates();
+window.addEventListener("travelflow:lead-created", syncPendingTripDates);
+window.addEventListener("travelflow:lead-trips-updated", syncPendingTripDates);
+window.addEventListener("travelflow:trip-dates-updated", syncPendingTripDates);
