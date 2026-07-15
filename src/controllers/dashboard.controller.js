@@ -5,6 +5,7 @@ import { showLeadDetail } from "./leads.controller.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
 
 const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
+const TERMINAL_STATUSES = new Set(["LOST", "BOOKING_CONFIRMED"]);
 let dashboardLoading = false;
 let dashboardLoaded = false;
 let dashboardData = null;
@@ -22,6 +23,14 @@ function safeImageUrl(value = "", seed = "travel") {
   return `https://picsum.photos/seed/${encodeURIComponent(seed)}/1000/700`;
 }
 
+function filterCommercialTasks(tasks, leads) {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  return tasks.filter((task) => {
+    const lead = leadById.get(task.leadId);
+    return lead && lead.active !== false && !TERMINAL_STATUSES.has(lead.status);
+  });
+}
+
 function renderTask(task, todayStart, todayEnd) {
   const due = toDate(task.dueAt);
   const overdue = due && due < todayStart;
@@ -35,7 +44,7 @@ function renderTripCards(trips, leads) {
   if (!upcoming.length) return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div></header><div class="daily-empty"><strong>No hi ha viatges amb data futura</strong><span>Afegeix o revisa les dates des del menú Viatges.</span></div></section>`;
   return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div><p>Clica una targeta per veure només els leads d’aquell viatge.</p></header><div class="dashboard-trip-grid">${upcoming.map((trip) => {
     const linkedLeads = leads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id));
-    const activeCount = linkedLeads.filter((lead) => !["LOST", "BOOKING_CONFIRMED"].includes(lead.status)).length;
+    const activeCount = linkedLeads.filter((lead) => !TERMINAL_STATUSES.has(lead.status)).length;
     const bookedCount = linkedLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
     const imageUrl = safeImageUrl(trip.imageUrl, trip.id || trip.name);
     const closingText = trip.closingDate ? `Tancament ${formatDate(`${trip.closingDate}T12:00:00`)}` : "Tancament pendent";
@@ -67,7 +76,8 @@ export async function showDailyDashboard({ force = false } = {}) {
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
   try {
     const [leads, trips] = await Promise.all([getLeads({ force }), getTrips({ force })]);
-    const tasks = await getOpenTasks({ leads, trips, runMaintenance: false });
+    const openTasks = await getOpenTasks({ leads, trips, runMaintenance: false });
+    const tasks = filterCommercialTasks(openTasks, leads);
     dashboardData = { leads, trips, tasks };
     dashboardDataAt = Date.now();
     root().innerHTML = renderDashboard(tasks, trips, leads);
@@ -80,6 +90,12 @@ export async function showDailyDashboard({ force = false } = {}) {
   }
 }
 
+function invalidateDashboardCache() {
+  dashboardData = null;
+  dashboardDataAt = 0;
+  dashboardLoaded = false;
+}
+
 document.addEventListener("click", (event) => {
   const nav = event.target.closest(".sidebar-nav__item");
   if (nav?.textContent.trim().startsWith("Dashboard")) { showDailyDashboard(); return; }
@@ -90,6 +106,8 @@ document.addEventListener("click", (event) => {
   const trip = event.target.closest("[data-dashboard-trip]");
   if (trip) showLeadsForTrip(trip.dataset.dashboardTrip);
 });
+
+window.addEventListener("travelflow:tasks-updated", invalidateDashboardCache);
 
 const shellObserver = new MutationObserver(() => {
   if (document.querySelector(".app-shell") && !dashboardLoaded) {
