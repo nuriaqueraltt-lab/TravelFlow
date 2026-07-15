@@ -17,8 +17,8 @@ function renderModal() {
       <section class="google-ads-import-panel" role="dialog" aria-modal="true" aria-labelledby="googleAdsImportTitle">
         <button class="google-ads-import-panel__close" type="button" data-close-google-ads-import aria-label="Tancar">×</button>
         <span class="section-kicker">Importació privada</span>
-        <h2 id="googleAdsImportTitle">Importar leads de Google Ads</h2>
-        <p>Enganxa directament les files del full. Les dades passaran del navegador a Firestore i no es guardaran a GitHub.</p>
+        <h2 id="googleAdsImportTitle">Importar leads històrics</h2>
+        <p>Enganxa directament les files del full. Les dades passen del navegador a Firestore i no es desen a GitHub.</p>
 
         <label class="google-ads-import-field">
           <span>Files del full</span>
@@ -51,7 +51,7 @@ function ensureImportButton() {
   importButton.type = "button";
   importButton.className = "secondary-button";
   importButton.dataset.openGoogleAdsImport = "";
-  importButton.textContent = "Importar Google Ads";
+  importButton.textContent = "Importar leads";
   actions.appendChild(importButton);
   heading.appendChild(actions);
 }
@@ -88,7 +88,7 @@ function previewImport() {
   preview.innerHTML = `
     <strong>${parsed.total} leads detectats</strong>
     <span>${parsed.lost} perduts · ${parsed.booked} reservats · ${parsed.withoutName} sense nom</span>
-    <small>Els duplicats es detectaran per telèfon, correu o nom i se'ls corregirà el canal a Google Ads.</small>`;
+    <small>Es conservarà l'origen de cada lead. Només s'afegirà una etiqueta de viatge quan coincideixi amb un viatge actual.</small>`;
 }
 
 async function runImport(button) {
@@ -101,14 +101,14 @@ async function runImport(button) {
   try {
     const result = await importGoogleAdsLeads(text);
     message.classList.add("is-success");
-    message.textContent = `${result.created} leads creats i ${result.updated} existents actualitzats a Google Ads.`;
+    message.textContent = `${result.created} leads creats, ${result.updated} actualitzats, ${result.tagged} amb etiqueta i ${result.untagged} sense etiqueta.`;
     window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
     window.setTimeout(async () => {
       closeModal();
       await showLeadsView();
-    }, 1200);
+    }, 1800);
   } catch (error) {
-    console.error("No s'ha pogut importar Google Ads:", error);
+    console.error("No s'ha pogut completar la importació:", error);
     message.classList.add("is-error");
     message.textContent = getGoogleAdsImportError(error);
     button.disabled = false;
