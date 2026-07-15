@@ -15,7 +15,7 @@ import { getCurrentUser } from "./auth.service.js";
 import { activateTripInformationFollowUps } from "./trip-interest-followup.service.js";
 import { INITIAL_TRIP_TAGS } from "../data/trip-tags.seed.js";
 
-const CACHE_TTL = 60 * 1000;
+const CACHE_TTL = 5 * 60 * 1000;
 const SEED_SESSION_KEY = "travelflow:trip-catalogue-checked";
 let tripsCache = null;
 let tripsCacheAt = 0;
