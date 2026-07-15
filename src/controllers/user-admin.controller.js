@@ -151,6 +151,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("[data-refresh-managed-users]")) {
+    loading = false;
     await showUserAdminView();
     return;
   }
@@ -213,9 +214,22 @@ document.addEventListener("submit", async (event) => {
       temporaryPassword: data.get("temporaryPassword")
     });
     const password = data.get("temporaryPassword");
-    usersCache = await getManagedUsers();
+    const visibleUser = {
+      id: created.uid,
+      displayName: created.displayName,
+      email: created.email,
+      role: created.role,
+      active: true
+    };
+    usersCache = [visibleUser, ...usersCache.filter((user) => user.id !== created.uid)]
+      .sort((a, b) => String(a.displayName || a.email).localeCompare(String(b.displayName || b.email), "ca"));
     root().innerHTML = renderView();
     setMessage(`${created.recoveredExistingAccount ? "Perfil completat" : "Accés creat"} per a ${created.displayName}. Contrasenya temporal: ${password}`);
+
+    getManagedUsers().then((users) => {
+      usersCache = users;
+      if (document.querySelector(".user-admin-page")) root().innerHTML = renderView();
+    }).catch((error) => console.warn("No s’ha pogut refrescar la llista d’usuaris:", error));
   } catch (error) {
     setMessage(getUserAdminError(error), true);
     button.disabled = false;
