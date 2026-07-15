@@ -29,10 +29,6 @@ function isAdmin() {
   return getCurrentUserProfile()?.role === USER_ROLES.ADMIN;
 }
 
-function roleLabel(role) {
-  return role === USER_ROLES.ADMIN ? "Administració" : "Comercial";
-}
-
 function renderUserRow(user) {
   const isSelf = user.id === getCurrentUserProfile()?.uid;
   return `
@@ -74,6 +70,7 @@ function renderView() {
           <h1>Usuaris i accessos</h1>
           <p>Dona accés a l’equip i controla què pot gestionar cada persona.</p>
         </div>
+        <button class="secondary-button" type="button" data-refresh-managed-users>Actualitzar llista</button>
       </header>
 
       <section class="user-admin-layout">
@@ -93,8 +90,8 @@ function renderView() {
                 <button class="secondary-button" type="button" data-generate-password>Generar</button>
               </span>
             </label>
-            <p class="user-admin-help">Comparteix aquesta contrasenya amb la usuària per un canal privat. Després podrà canviar-la amb “He oblidat la contrasenya”.</p>
-            <button class="primary-button" type="submit">Crear accés</button>
+            <p class="user-admin-help">Si el compte ja existeix a Firebase però no apareix a la llista, torna a introduir el mateix correu i la mateixa contrasenya temporal. TravelFlow completarà el perfil que falta.</p>
+            <button class="primary-button" type="submit">Crear o completar accés</button>
             <p class="user-admin-message" data-user-admin-message role="status"></p>
           </form>
         </article>
@@ -153,6 +150,11 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-refresh-managed-users]")) {
+    await showUserAdminView();
+    return;
+  }
+
   const generate = event.target.closest("[data-generate-password]");
   if (generate) {
     const input = generate.closest("form")?.elements.namedItem("temporaryPassword");
@@ -169,6 +171,7 @@ document.addEventListener("click", async (event) => {
         role: row.querySelector("[data-user-role]").value,
         active: row.querySelector("[data-user-active]").value === "true"
       });
+      loading = false;
       await showUserAdminView();
     } catch (error) {
       window.alert(getUserAdminError(error));
@@ -201,7 +204,7 @@ document.addEventListener("submit", async (event) => {
   const button = form.querySelector('button[type="submit"]');
   const data = new FormData(form);
   button.disabled = true;
-  setMessage("Creant l’accés...");
+  setMessage("Creant o completant l’accés...");
   try {
     const created = await createManagedUser({
       displayName: data.get("displayName"),
@@ -212,7 +215,7 @@ document.addEventListener("submit", async (event) => {
     const password = data.get("temporaryPassword");
     usersCache = await getManagedUsers();
     root().innerHTML = renderView();
-    setMessage(`Accés creat per a ${created.displayName}. Contrasenya temporal: ${password}`);
+    setMessage(`${created.recoveredExistingAccount ? "Perfil completat" : "Accés creat"} per a ${created.displayName}. Contrasenya temporal: ${password}`);
   } catch (error) {
     setMessage(getUserAdminError(error), true);
     button.disabled = false;
