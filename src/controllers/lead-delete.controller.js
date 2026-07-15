@@ -21,7 +21,7 @@ function ensureDeleteButton() {
 }
 
 async function handleDelete(button) {
-  const leadId = document.body.dataset.currentLeadId || window.currentLeadId || "";
+  const leadId = document.body.dataset.currentLeadId || "";
   const heading = document.querySelector(".lead-detail-hero h1")?.textContent?.trim() || "aquest lead";
 
   if (!leadId) {
@@ -52,13 +52,15 @@ const observer = new MutationObserver(() => requestAnimationFrame(ensureDeleteBu
 observer.observe(document.body, { childList: true, subtree: true });
 
 document.addEventListener("click", (event) => {
+  const row = event.target.closest("[data-lead-id]");
+  if (row?.dataset.leadId) document.body.dataset.currentLeadId = row.dataset.leadId;
+
+  if (event.target.closest("[data-back-to-leads]")) {
+    document.body.removeAttribute("data-current-lead-id");
+  }
+
   const button = event.target.closest("[data-delete-lead]");
   if (button) handleDelete(button);
-});
-
-window.addEventListener("travelflow:lead-opened", (event) => {
-  if (event.detail?.id) document.body.dataset.currentLeadId = event.detail.id;
-  ensureDeleteButton();
 });
 
 ensureDeleteButton();
