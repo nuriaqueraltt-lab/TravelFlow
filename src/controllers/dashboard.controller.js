@@ -76,7 +76,7 @@ export async function showDailyDashboard({ force = false } = {}) {
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
   try {
     const [leads, trips] = await Promise.all([getLeads({ force }), getTrips({ force })]);
-    const openTasks = await getOpenTasks({ leads, trips, runMaintenance: false });
+    const openTasks = await getOpenTasks({ leads, trips, runMaintenance: false, force });
     const tasks = filterCommercialTasks(openTasks, leads);
     dashboardData = { leads, trips, tasks };
     dashboardDataAt = Date.now();
