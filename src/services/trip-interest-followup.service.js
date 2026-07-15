@@ -105,14 +105,21 @@ export async function activateTripInformationFollowUps({ tripId, tripName }) {
   if (!user || !tripId) return 0;
 
   const [leadsSnapshot, existingTasksSnapshot] = await Promise.all([
-    getDocs(collection(db, "leads")),
-    getDocs(query(collection(db, "tasks"), where("status", "==", "PENDING")))
+    getDocs(query(collection(db, "leads"), where("tripIds", "array-contains", tripId))),
+    getDocs(query(collection(db, "tasks"), where("tripId", "==", tripId)))
   ]);
 
-  const existingKeys = new Set(existingTasksSnapshot.docs.map((taskDoc) => {
-    const task = taskDoc.data();
-    return `${task.leadId}|${task.tripId}|${task.type}`;
-  }));
+  const existingKeys = new Set(
+    existingTasksSnapshot.docs
+      .filter((taskDoc) => {
+        const task = taskDoc.data();
+        return task.status === "PENDING" && task.type === INFO_READY_TASK_TYPE;
+      })
+      .map((taskDoc) => {
+        const task = taskDoc.data();
+        return `${task.leadId}|${task.tripId}|${task.type}`;
+      })
+  );
 
   const dueAt = todayAtNine();
   const title = `Enviar informació de ${tripName || "viatge"}`;
@@ -121,7 +128,6 @@ export async function activateTripInformationFollowUps({ tripId, tripName }) {
 
   leadsSnapshot.docs.map(mapDocument).forEach((lead) => {
     if (lead.active === false || TERMINAL_STATUSES.has(lead.status)) return;
-    if (!Array.isArray(lead.tripIds) || !lead.tripIds.includes(tripId)) return;
 
     const key = `${lead.id}|${tripId}|${INFO_READY_TASK_TYPE}`;
     if (existingKeys.has(key)) return;
