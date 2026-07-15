@@ -3,8 +3,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   Timestamp,
+  where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
@@ -71,18 +73,25 @@ async function runExpiredLeadMaintenance() {
   const user = getCurrentUser();
   if (!user) return 0;
 
-  const snapshot = await getDocs(collection(db, "leads"));
-  const expiredLeads = snapshot.docs
-    .map(mapDocument)
-    .filter((lead) => lead.active !== false && lead.status === "LOST" && lead.lostAutomatically === true);
+  const [leadSnapshot, taskSnapshot] = await Promise.all([
+    getDocs(query(
+      collection(db, "leads"),
+      where("active", "==", true),
+      where("status", "==", "LOST"),
+      where("lostAutomatically", "==", true)
+    )),
+    getDocs(query(collection(db, "tasks"), where("type", "==", TASK_TYPE)))
+  ]);
 
+  const expiredLeads = leadSnapshot.docs.map(mapDocument);
   if (!expiredLeads.length) return 0;
 
-  const taskChecks = await Promise.all(expiredLeads.map(async (lead) => {
-    const taskSnapshot = await getDoc(doc(db, "tasks", taskIdForLead(lead.id)));
-    return taskSnapshot.exists() ? null : lead;
-  }));
-  const missing = taskChecks.filter(Boolean);
+  const leadsWithTask = new Set(
+    taskSnapshot.docs
+      .map((taskDoc) => taskDoc.data().leadId)
+      .filter(Boolean)
+  );
+  const missing = expiredLeads.filter((lead) => !leadsWithTask.has(lead.id));
 
   if (!missing.length) return 0;
 
