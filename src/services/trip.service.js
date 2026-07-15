@@ -12,6 +12,7 @@ import {
 
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
+import { activateTripInformationFollowUps } from "./trip-interest-followup.service.js";
 import { INITIAL_TRIP_TAGS } from "../data/trip-tags.seed.js";
 
 const CACHE_TTL = 60 * 1000;
@@ -137,6 +138,15 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
     updatedAt: serverTimestamp()
   });
   invalidateTripsCache();
+
+  const updatedTrips = await getTrips({ force: true });
+  const updatedTrip = updatedTrips.find((trip) => trip.id === tripId);
+  const activated = await activateTripInformationFollowUps({
+    tripId,
+    tripName: updatedTrip?.name || "viatge"
+  });
+  window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
+  return { activated };
 }
 
 export function getTripErrorMessage(error) {
