@@ -169,16 +169,18 @@ export async function updateLead(leadId, input) {
   await updateDoc(doc(db, "leads", leadId), update);
   upsertLeadCache({ id: leadId, ...update });
 
-  const taskSnapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId)));
+  const taskSnapshot = await getDocs(query(
+    collection(db, "tasks"),
+    where("leadId", "==", leadId),
+    where("status", "==", TASK_STATUSES.PENDING)
+  ));
   const batch = writeBatch(db);
   batch.set(doc(collection(db, "activities")), {
     leadId, type: ACTIVITY_TYPES.NOTE, description: "Dades i etiquetes de la futura viatgera actualitzades.",
     createdBy: currentUser.uid, createdAt: serverTimestamp()
   });
   taskSnapshot.docs.forEach((taskDoc) => {
-    if (taskDoc.data().status === TASK_STATUSES.PENDING) {
-      batch.update(taskDoc.ref, { leadName: fullName, tripName: tripLabels[0] || "", updatedAt: serverTimestamp() });
-    }
+    batch.update(taskDoc.ref, { leadName: fullName, tripName: tripLabels[0] || "", updatedAt: serverTimestamp() });
   });
   await batch.commit();
 }
