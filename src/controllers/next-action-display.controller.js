@@ -2,29 +2,42 @@ function normalize(value = "") {
   return String(value).trim().replace(/\s+/g, " ");
 }
 
+function summaryValue(page, label) {
+  return [...page.querySelectorAll(".lead-summary-grid article")]
+    .find((card) => normalize(card.querySelector("span")?.textContent) === label)
+    ?.querySelector("strong");
+}
+
 function syncNextActionDisplay() {
-  const detail = document.querySelector(".lead-detail-page");
-  if (!detail) return;
+  const page = document.querySelector(".lead-detail-page");
+  if (!page) return;
 
-  const summaryCards = detail.querySelectorAll(".lead-summary-grid article");
-  if (summaryCards.length < 4) return;
-
-  const titleElement = summaryCards[2].querySelector("strong");
-  const dateElement = summaryCards[3].querySelector("strong");
+  const statusElement = summaryValue(page, "Estat");
+  const titleElement = summaryValue(page, "Pròxima acció");
+  const dateElement = summaryValue(page, "Data pròxima acció");
   if (!titleElement || !dateElement) return;
 
-  const nextActionTitle = normalize(titleElement.textContent);
-  if (!nextActionTitle || nextActionTitle === "Sense acció") return;
+  const terminal = ["Reserva confirmada", "Perdut"].includes(normalize(statusElement?.textContent));
+  if (terminal) {
+    titleElement.textContent = "Sense acció";
+    dateElement.textContent = "—";
+    return;
+  }
 
-  const matchingTasks = [...detail.querySelectorAll(".timeline-item.is-pending")]
-    .filter((item) => normalize(item.querySelector("strong")?.textContent) === nextActionTitle);
+  const pendingItems = [...page.querySelectorAll(".timeline-item.is-pending")];
+  const nextTask = pendingItems[0];
+  if (!nextTask) {
+    titleElement.textContent = "Sense acció";
+    dateElement.textContent = "—";
+    return;
+  }
 
-  const matchingTask = matchingTasks.at(-1);
-  const taskDateText = normalize(matchingTask?.querySelector("small")?.textContent)
+  const title = normalize(nextTask.querySelector("strong")?.textContent);
+  const date = normalize(nextTask.querySelector("small")?.textContent)
     .replace(/\s*·\s*Pendent\s*$/i, "");
 
-  if (!taskDateText || taskDateText === normalize(dateElement.textContent)) return;
-  dateElement.textContent = taskDateText;
+  titleElement.textContent = title || "Sense acció";
+  dateElement.textContent = date || "—";
 }
 
 let scheduled = false;
