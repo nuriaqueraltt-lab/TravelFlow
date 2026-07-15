@@ -17,6 +17,12 @@ import { showLeadDetail } from "./leads.controller.js";
 
 let activeLeadId = "";
 
+function setActiveLeadId(leadId = "") {
+  activeLeadId = String(leadId || "").trim();
+  if (activeLeadId) document.body.dataset.currentLeadId = activeLeadId;
+  else document.body.removeAttribute("data-current-lead-id");
+}
+
 function localDateTimestamp(value) {
   if (!value) return null;
   const date = new Date(`${value}T10:00:00`);
@@ -87,9 +93,20 @@ async function saveManualFollowUp({ leadId, title, dueAt }) {
 
 document.addEventListener("click", (event) => {
   const row = event.target.closest("[data-lead-id]");
-  if (row?.dataset.leadId) activeLeadId = row.dataset.leadId;
-  if (event.target.closest("[data-back-to-leads]")) activeLeadId = "";
+  const dashboardTask = event.target.closest("[data-dashboard-lead]");
+
+  if (row?.dataset.leadId) setActiveLeadId(row.dataset.leadId);
+  if (dashboardTask?.dataset.dashboardLead) setActiveLeadId(dashboardTask.dataset.dashboardLead);
+  if (event.target.closest("[data-back-to-leads]")) setActiveLeadId("");
 }, true);
+
+window.addEventListener("travelflow:lead-created", (event) => {
+  if (event.detail?.id) setActiveLeadId(event.detail.id);
+});
+
+window.addEventListener("travelflow:lead-opened", (event) => {
+  if (event.detail?.id) setActiveLeadId(event.detail.id);
+});
 
 document.addEventListener("submit", async (event) => {
   const form = event.target.closest('form[data-form="schedule"]');
