@@ -37,7 +37,7 @@ function filterTrips() {
 }
 
 function setTripsActive() { document.querySelectorAll(".sidebar-nav__item").forEach((button) => button.classList.toggle("is-active", button.textContent.trim().startsWith("Viatges"))); }
-async function showTripsView() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { await seedInitialTrips(); tripsCache = await getTrips({ force: true }); root.innerHTML = renderTripsView(tripsCache); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
+async function showTripsView() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { await seedInitialTrips(); tripsCache = await getTrips(); root.innerHTML = renderTripsView(tripsCache); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 function enableTripsButton() { const button = [...document.querySelectorAll(".sidebar-nav__item")].find((item) => item.textContent.trim().startsWith("Viatges")); if (!button) return; button.disabled = false; button.querySelector("small")?.remove(); }
 const observer = new MutationObserver(enableTripsButton); observer.observe(document.body, { childList: true, subtree: true }); enableTripsButton();
 
