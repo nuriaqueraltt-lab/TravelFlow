@@ -1,0 +1,31 @@
+.lead-detail-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.lead-delete-button {
+  border-color: rgba(176, 63, 54, 0.28);
+  color: var(--color-danger);
+}
+
+.lead-delete-button:hover {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.lead-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 720px) {
+  .lead-detail-hero__actions {
+    width: 100%;
+  }
+
+  .lead-detail-hero__actions button {
+    flex: 1 1 180px;
+  }
+}
