@@ -16,7 +16,7 @@ const STATUS_MAP = Object.freeze({
   RESERVAT: "BOOKING_CONFIRMED",
   SEGUIMENT: "FOLLOW_UP",
   "PRÒXIMA_VEGADA": "CONTACT_LATER",
-  "PROXIMA_VEGADA": "CONTACT_LATER",
+  PROXIMA_VEGADA: "CONTACT_LATER",
   "DEMANA INFO": "INFO_SENT",
   "INFO ENVIADA": "INFO_SENT",
   MAIL_BENVINGUDA: "INFO_SENT",
@@ -25,20 +25,41 @@ const STATUS_MAP = Object.freeze({
 
 const LOST_REASON_MAP = Object.freeze({
   NO_CONTESTA: "NO_RESPONSE",
-  ALTRE_VIATGE: "DESTINATION",
-  FEINA: "OTHER"
+  ECON: "PRICE",
+  DATES: "DATES",
+  SALUT: "HEALTH",
+  VACANCES: "NO_HOLIDAYS",
+  ALTRE_VIATGE: "BOOKED_ELSEWHERE",
+  DESTINACIO: "DESTINATION",
+  DURADA: "OTHER",
+  NO_MOMENT: "OTHER",
+  FEINA: "OTHER",
+  ALTRES: "OTHER"
 });
 
-const TRIP_CODE_HINTS = Object.freeze({
+const ENTRY_MAP = Object.freeze({
+  INSTAGRAM: { channel: "INSTAGRAM", source: "INSTAGRAM_ORGANIC", label: "Instagram" },
+  INSTA_ADS: { channel: "INSTAGRAM", source: "INSTAGRAM_ORGANIC", label: "Instagram Ads" },
+  GOOGLE_ADS: { channel: "WEB", source: "GOOGLE_ADS", label: "Google Ads" },
+  MAIL_WEB: { channel: "WEB", source: "WEBSITE_FORM", label: "Formulari web" },
+  RESERVA_WEB: { channel: "WEB", source: "WEBSITE_FORM", label: "Reserva web" },
+  WHATSAPP: { channel: "WHATSAPP", source: "WHATSAPP", label: "WhatsApp" },
+  OFICINA: { channel: "OTHER", source: "MANUAL", label: "Oficina" }
+});
+
+const CURRENT_TRIP_HINTS = Object.freeze({
+  UZBEKISTAN: ["uzbekistan"],
+  MARRAKECH_TARDOR: ["marrakech", "essaouira"],
+  NAPOLS: ["napols", "pompeia", "amalfitana"],
+  TRANSILVANIA: ["transilvania"],
   SRI_LANKA: ["sri lanka"],
-  VIETNAM_2027: ["2027", "vietnam"],
-  XINA: ["2027", "xina"],
-  LA_MANCHA: ["la mancha"],
-  LONDRES: ["2026", "londres"],
-  ALSACIA_NADAL: ["alsacia en navidad"],
-  MUNICH: ["2026", "munich"],
-  MARRAKECH_TARDOR: ["marrakech y essaouira"],
-  UZBEKISTAN: ["2026", "uzbekistan"]
+  SICILIA: ["sicilia"],
+  MUNICH: ["munich", "tirol"],
+  ALSACIA_NADAL: ["alsacia", "nadal"],
+  NOVA_YORK: ["nova york"],
+  MARRAKECH_FI_ANY: ["marrakech", "fi d'any"],
+  CREUER_RIN: ["rin"],
+  LONDRES: ["londres"]
 });
 
 function normalizeText(value = "") {
@@ -46,6 +67,8 @@ function normalizeText(value = "") {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
 
@@ -79,28 +102,30 @@ function addDays(date, amount) {
 
 function splitName(fullName = "") {
   const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
-  return {
-    firstName: parts.shift() || "Lead",
-    lastName: parts.join(" ")
-  };
+  return { firstName: parts.shift() || "Lead", lastName: parts.join(" ") };
 }
 
 function identityKeys(item) {
   const keys = [];
   if (item.phoneNormalized) keys.push(`phone:${item.phoneNormalized}`);
   if (item.email) keys.push(`email:${item.email}`);
+  if (item.instagramHandle) keys.push(`instagram:${normalizeText(item.instagramHandle)}`);
   if (!keys.length && item.fullName) keys.push(`name:${normalizeText(item.fullName)}`);
   return keys;
 }
 
-function detectContact(firstValue = "", secondValue = "") {
-  const values = [firstValue, secondValue].map((value) => String(value).trim());
+function detectContact(firstValue = "", secondValue = "", sourceKey = "") {
+  const values = [firstValue, secondValue].map((value) => String(value).trim()).filter((value) => value && value !== "-");
   const email = values.map(normalizeEmail).find(Boolean) || "";
   const phoneValue = values.find((value) => !value.includes("@") && normalizePhone(value)) || "";
+  const instagramValue = sourceKey === "INSTAGRAM" || sourceKey === "INSTA_ADS"
+    ? values.find((value) => !normalizeEmail(value) && !normalizePhone(value)) || ""
+    : "";
   return {
     email,
     phone: phoneValue,
-    phoneNormalized: normalizePhone(phoneValue)
+    phoneNormalized: normalizePhone(phoneValue),
+    instagramHandle: instagramValue
   };
 }
 
@@ -108,28 +133,24 @@ function resolveDates(entryRaw, firstContactRaw, lastContactRaw) {
   const firstContact = parseDate(firstContactRaw);
   let entry = parseDate(entryRaw) || firstContact;
   const lastContact = parseDate(lastContactRaw) || firstContact || entry;
-
   if (entry && firstContact && entry > firstContact) {
     const differenceInDays = Math.round((entry - firstContact) / 86400000);
     if (differenceInDays >= 20) entry = firstContact;
   }
-
   return { entry, firstContact: firstContact || entry, lastContact: lastContact || entry };
 }
 
-function buildTask(status, notes, lastContact, suppliedDate) {
+function buildTask(status, notes, lastContact) {
   if (["LOST", "BOOKING_CONFIRMED"].includes(status)) return null;
-
   const titles = {
     FOLLOW_UP: "Fer seguiment",
     INFO_SENT: "Fer seguiment després d'enviar informació",
     CONTACT_LATER: "Revisar interès per a futurs viatges",
-    NEW: "Revisar consulta de Google Ads"
+    NEW: "Revisar consulta"
   };
-
   return {
-    title: titles[status] || "Revisar lead de Google Ads",
-    dueAt: suppliedDate || addDays(lastContact || new Date(), status === "INFO_SENT" ? 3 : 7),
+    title: titles[status] || "Revisar lead",
+    dueAt: addDays(lastContact || new Date(), status === "INFO_SENT" ? 3 : 7),
     note: notes || ""
   };
 }
@@ -137,16 +158,22 @@ function buildTask(status, notes, lastContact, suppliedDate) {
 function parseLine(line, index) {
   const columns = line.split("\t").map((value) => value.trim());
   if (!columns.some(Boolean)) return null;
-  if (normalizeText(columns[0]).startsWith("data entrada")) return null;
+
+  const firstCell = normalizeText(columns[0]);
+  if (firstCell === "data entrada" && !parseDate(columns[1])) return null;
+  if (firstCell === "data entrada" && parseDate(columns[1])) columns[0] = "";
+  if (firstCell.startsWith("data entrada") && normalizeText(columns[1]).includes("primer contacte")) return null;
 
   while (columns.length < 12) columns.push("");
-  const [entryRaw, firstContactRaw, , , nameRaw, contactA, contactB, tripCodeRaw, statusRaw, lostReasonRaw, lastContactRaw, ...noteParts] = columns;
-  const contact = detectContact(contactA, contactB);
+  const [entryRaw, firstContactRaw, leadTypeRaw, sourceRaw, nameRaw, contactA, contactB, tripCodeRaw, statusRaw, lostReasonRaw, lastContactRaw, ...noteParts] = columns;
+  const sourceKey = String(sourceRaw).trim().toUpperCase();
+  const entry = ENTRY_MAP[sourceKey] || { channel: "OTHER", source: "OTHER", label: sourceRaw || "Altres" };
+  const contact = detectContact(contactA, contactB, sourceKey);
   const dates = resolveDates(entryRaw, firstContactRaw, lastContactRaw);
   const statusKey = String(statusRaw).trim().toUpperCase();
   const status = STATUS_MAP[statusKey] || "NEW";
-  const phoneLabel = contact.phone || contact.email || `fila ${index + 1}`;
-  const fullName = String(nameRaw).trim() || `Lead Google Ads ${phoneLabel}`;
+  const phoneLabel = contact.phone || contact.email || contact.instagramHandle || `fila ${index + 1}`;
+  const fullName = String(nameRaw).trim() || `Lead ${phoneLabel}`;
   const notes = noteParts.join(" ").trim();
   const lostReasonKey = String(lostReasonRaw).trim().toUpperCase();
 
@@ -154,10 +181,10 @@ function parseLine(line, index) {
     lineNumber: index + 1,
     fullName,
     ...splitName(fullName),
-    phone: contact.phone,
-    phoneNormalized: contact.phoneNormalized,
-    email: contact.email,
+    ...contact,
     tripCode: String(tripCodeRaw).trim().toUpperCase(),
+    leadType: String(leadTypeRaw).trim().toUpperCase(),
+    entry,
     status,
     lostReason: status === "LOST" ? (LOST_REASON_MAP[lostReasonKey] || "OTHER") : "",
     notes,
@@ -168,28 +195,31 @@ function parseLine(line, index) {
 }
 
 export function parseGoogleAdsImport(text = "") {
-  const rows = String(text)
-    .replace(/\r/g, "")
-    .split("\n")
-    .map(parseLine)
-    .filter(Boolean);
-
+  const rows = String(text).replace(/\r/g, "").split("\n").map(parseLine).filter(Boolean);
   return {
     rows,
     total: rows.length,
     lost: rows.filter((row) => row.status === "LOST").length,
     booked: rows.filter((row) => row.status === "BOOKING_CONFIRMED").length,
-    withoutName: rows.filter((row) => row.fullName.startsWith("Lead Google Ads")).length
+    withoutName: rows.filter((row) => row.fullName.startsWith("Lead ")).length
   };
 }
 
 function findTripForCode(code, trips) {
-  const hints = TRIP_CODE_HINTS[code];
+  const hints = CURRENT_TRIP_HINTS[code];
   if (!hints) return null;
+  const normalizedHints = hints.map(normalizeText);
   return trips.find((trip) => {
-    const normalized = normalizeText(trip.name);
-    return hints.every((hint) => normalized.includes(normalizeText(hint)));
+    const normalizedName = normalizeText(trip.name);
+    return normalizedHints.every((hint) => normalizedName.includes(hint));
   }) || null;
+}
+
+function mergeNotes(existing = "", incoming = "") {
+  const current = String(existing || "").trim();
+  const next = String(incoming || "").trim();
+  if (!next || current.includes(next)) return current;
+  return current ? `${current}\n\n${next}` : next;
 }
 
 async function commitOperations(operations) {
@@ -211,54 +241,64 @@ export async function importGoogleAdsLeads(text = "") {
   const parsed = parseGoogleAdsImport(text);
   if (!parsed.rows.length) throw new Error("NO_VALID_ROWS");
 
-  const [trips, leadsSnapshot] = await Promise.all([
-    getTrips(),
-    getDocs(collection(db, "leads"))
-  ]);
-
+  const [trips, leadsSnapshot] = await Promise.all([getTrips(), getDocs(collection(db, "leads"))]);
   const leadsByIdentity = new Map();
   leadsSnapshot.docs.forEach((leadDoc) => {
     const data = leadDoc.data();
     identityKeys({
       fullName: data.fullName,
       phoneNormalized: data.phoneNormalized || normalizePhone(data.phone),
-      email: normalizeEmail(data.email)
+      email: normalizeEmail(data.email),
+      instagramHandle: data.instagramHandle || ""
     }).forEach((key) => leadsByIdentity.set(key, { ref: leadDoc.ref, data }));
   });
 
   const operations = [];
   let created = 0;
   let updated = 0;
+  let tagged = 0;
 
   parsed.rows.forEach((item) => {
     const match = identityKeys(item).map((key) => leadsByIdentity.get(key)).find(Boolean);
     const trip = findTripForCode(item.tripCode, trips);
     const tripIds = trip ? [trip.id] : [];
     const tripLabels = trip ? [trip.name] : [];
+    if (trip) tagged += 1;
     const createdAt = toTimestamp(item.createdDate);
     const lastContactAt = toTimestamp(item.lastContactDate);
-    const task = buildTask(item.status, item.notes, item.lastContactDate, item.lastContactDate);
+    const task = buildTask(item.status, item.notes, item.lastContactDate);
 
     if (match) {
+      const existingTripIds = Array.isArray(match.data.tripIds) ? match.data.tripIds : [];
+      const existingTripLabels = Array.isArray(match.data.tripLabels) ? match.data.tripLabels : [];
       operations.push({
         ref: match.ref,
         merge: true,
         data: {
-          channel: "WEB",
-          source: "GOOGLE_ADS",
-          entryPreset: "GOOGLE_ADS",
-          entryLabel: "Google Ads",
+          channel: item.entry.channel,
+          source: item.entry.source,
+          entryPreset: item.tripCode || item.entry.source,
+          entryLabel: item.entry.label,
+          status: item.status,
+          lostReason: item.lostReason,
+          notes: mergeNotes(match.data.notes, item.notes),
+          tripIds: [...new Set([...existingTripIds, ...tripIds])],
+          tripLabels: [...new Set([...existingTripLabels, ...tripLabels])],
+          interest: [...new Set([...existingTripLabels, ...tripLabels])].join(", "),
+          legacyInterestCode: item.tripCode,
+          lastContactAt,
+          updatedAt: lastContactAt,
           updatedBy: user.uid,
-          googleAdsCorrectedAt: Timestamp.now()
+          imported: true,
+          importBatch: "historical-private-paste-2026"
         }
       });
-
       operations.push({
         ref: doc(collection(db, "activities")),
         data: {
           leadId: match.ref.id,
-          type: "CHANNEL_UPDATED",
-          description: "Canal d'entrada actualitzat a Google Ads durant la importació històrica.",
+          type: "LEAD_UPDATED",
+          description: "Lead actualitzat durant la importació històrica privada.",
           createdBy: user.uid,
           createdAt: Timestamp.now()
         }
@@ -278,13 +318,13 @@ export async function importGoogleAdsLeads(text = "") {
         phone: item.phone,
         phoneNormalized: item.phoneNormalized,
         email: item.email,
-        instagramHandle: "",
+        instagramHandle: item.instagramHandle,
         facebookUrl: "",
-        channel: "WEB",
-        source: "GOOGLE_ADS",
-        entryPreset: "GOOGLE_ADS",
-        entryLabel: "Google Ads",
-        campaign: "Google Ads històric 2026",
+        channel: item.entry.channel,
+        source: item.entry.source,
+        entryPreset: item.tripCode || item.entry.source,
+        entryLabel: item.entry.label,
+        campaign: "Importació històrica 2026",
         tripIds,
         tripLabels,
         interest: tripLabels.join(", "),
@@ -293,7 +333,7 @@ export async function importGoogleAdsLeads(text = "") {
         status: item.status,
         lostReason: item.lostReason,
         priority: "NORMAL",
-        temperature: "WARM",
+        temperature: item.status === "BOOKING_CONFIRMED" ? "HOT" : "WARM",
         ownerId: user.uid,
         createdBy: user.uid,
         updatedBy: user.uid,
@@ -305,7 +345,7 @@ export async function importGoogleAdsLeads(text = "") {
         createdAt,
         updatedAt: lastContactAt,
         imported: true,
-        importBatch: "google-ads-private-paste-2026"
+        importBatch: "historical-private-paste-2026"
       }
     });
 
@@ -314,7 +354,7 @@ export async function importGoogleAdsLeads(text = "") {
       data: {
         leadId: leadRef.id,
         type: "LEAD_CREATED",
-        description: "Lead importat del llistat històric de Google Ads.",
+        description: `Lead importat del llistat històric (${item.entry.label}).`,
         createdBy: user.uid,
         createdAt
       }
@@ -348,7 +388,7 @@ export async function importGoogleAdsLeads(text = "") {
           createdBy: user.uid,
           createdAt: lastContactAt,
           updatedAt: lastContactAt,
-          importBatch: "google-ads-private-paste-2026"
+          importBatch: "historical-private-paste-2026"
         }
       });
     }
@@ -358,7 +398,7 @@ export async function importGoogleAdsLeads(text = "") {
   });
 
   await commitOperations(operations);
-  return { ...parsed, created, updated };
+  return { ...parsed, created, updated, tagged, untagged: parsed.total - tagged };
 }
 
 export function getGoogleAdsImportError(error) {
@@ -367,5 +407,5 @@ export function getGoogleAdsImportError(error) {
     ADMIN_REQUIRED: "Només una usuària ADMIN pot fer aquesta importació.",
     NO_VALID_ROWS: "No s'ha detectat cap fila vàlida. Enganxa el bloc complet mantenint les columnes."
   };
-  return messages[error?.message] || "No s'ha pogut completar la importació de Google Ads.";
+  return messages[error?.message] || "No s'ha pogut completar la importació històrica.";
 }
