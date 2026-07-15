@@ -14,6 +14,7 @@ import {
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { getTrips } from "./trip.service.js";
+import { invalidateLeadsCache } from "./lead.service.js";
 import {
   ACTIVITY_TYPES,
   FOLLOW_UP_DEFAULTS,
@@ -30,10 +31,8 @@ function addDays(date, days) { const result = new Date(date); result.setHours(9,
 function asTimestamp(value) { if (!value) return null; if (typeof value.toDate === "function") return value; const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? null : Timestamp.fromDate(date); }
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function todayIso() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
-function shouldRunMaintenance() {
-  const lastRun = Number(sessionStorage.getItem(MAINTENANCE_KEY) || 0);
-  return !lastRun || Date.now() - lastRun > MAINTENANCE_TTL;
-}
+function shouldRunMaintenance() { const lastRun = Number(sessionStorage.getItem(MAINTENANCE_KEY) || 0); return !lastRun || Date.now() - lastRun > MAINTENANCE_TTL; }
+async function commitLeadBatch(batch) { await batch.commit(); invalidateLeadsCache(); }
 
 export async function getLeadTasks(leadId) {
   const snapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId)));
@@ -51,10 +50,7 @@ export async function processClosedTrips({ trips: suppliedTrips = null, leads: s
   const today = todayIso();
   const closedTrips = trips.filter((trip) => trip.closingDate && trip.closingDate <= today);
   if (!closedTrips.length) return 0;
-  const pendingKeys = new Set(pendingTasksSnapshot.docs.map((item) => {
-    const task = item.data();
-    return `${task.leadId}|${task.tripId}|${task.type}`;
-  }));
+  const pendingKeys = new Set(pendingTasksSnapshot.docs.map((item) => { const task = item.data(); return `${task.leadId}|${task.tripId}|${task.type}`; }));
   const activeLeads = leads.filter((lead) => lead.active !== false && ![LEAD_STATUSES.LOST, LEAD_STATUSES.BOOKING_CONFIRMED].includes(lead.status));
   const operations = [];
   closedTrips.forEach((trip) => {
@@ -62,17 +58,8 @@ export async function processClosedTrips({ trips: suppliedTrips = null, leads: s
       const key = `${lead.id}|${trip.id}|${TASK_TYPES.TRIP_CLOSED}`;
       if (pendingKeys.has(key)) return;
       operations.push((batch) => {
-        batch.set(doc(collection(db, "tasks")), {
-          leadId: lead.id, leadName: lead.fullName, tripId: trip.id, tripName: trip.name,
-          title: "Viatge tancat", type: TASK_TYPES.TRIP_CLOSED, status: TASK_STATUSES.PENDING,
-          automatic: true, dueAt: Timestamp.fromDate(new Date(`${trip.closingDate}T09:00:00`)),
-          createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-        });
-        batch.set(doc(collection(db, "activities")), {
-          leadId: lead.id, type: ACTIVITY_TYPES.TRIP_CLOSED,
-          description: `${trip.name}: viatge tancat. Cal decidir llista d'espera, proper any o pèrdua.`,
-          tripId: trip.id, createdBy: user.uid, createdAt: serverTimestamp()
-        });
+        batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripId: trip.id, tripName: trip.name, title: "Viatge tancat", type: TASK_TYPES.TRIP_CLOSED, status: TASK_STATUSES.PENDING, automatic: true, dueAt: Timestamp.fromDate(new Date(`${trip.closingDate}T09:00:00`)), createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.TRIP_CLOSED, description: `${trip.name}: viatge tancat. Cal decidir llista d'espera, proper any o pèrdua.`, tripId: trip.id, createdBy: user.uid, createdAt: serverTimestamp() });
       });
       pendingKeys.add(key);
     });
@@ -107,11 +94,7 @@ export async function getOpenTasks({ leads = null, trips = null, runMaintenance 
   if (orphaned.length) {
     for (let start = 0; start < orphaned.length; start += 400) {
       const batch = writeBatch(db);
-      orphaned.slice(start, start + 400).forEach((task) => batch.update(doc(db, "tasks", task.id), {
-        status: TASK_STATUSES.CANCELLED,
-        cancelledReason: "LEAD_DELETED_OR_INACTIVE",
-        updatedAt: serverTimestamp()
-      }));
+      orphaned.slice(start, start + 400).forEach((task) => batch.update(doc(db, "tasks", task.id), { status: TASK_STATUSES.CANCELLED, cancelledReason: "LEAD_DELETED_OR_INACTIVE", updatedAt: serverTimestamp() }));
       await batch.commit();
     }
   }
@@ -122,9 +105,7 @@ export async function cancelPendingAutomaticTasks(leadId, batch = null) {
   const snapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId), where("status", "==", TASK_STATUSES.PENDING)));
   const ownBatch = batch ?? writeBatch(db);
   snapshot.docs.forEach((taskDoc) => {
-    if (taskDoc.data().automatic === true && taskDoc.data().type !== TASK_TYPES.TRIP_CLOSED) {
-      ownBatch.update(taskDoc.ref, { status: TASK_STATUSES.CANCELLED, cancelledReason: "REPLACED_BY_MANUAL_ACTION", updatedAt: serverTimestamp() });
-    }
+    if (taskDoc.data().automatic === true && taskDoc.data().type !== TASK_TYPES.TRIP_CLOSED) ownBatch.update(taskDoc.ref, { status: TASK_STATUSES.CANCELLED, cancelledReason: "REPLACED_BY_MANUAL_ACTION", updatedAt: serverTimestamp() });
   });
   if (!batch) await ownBatch.commit();
 }
@@ -134,7 +115,7 @@ export async function recordManualContact({ lead, description, status = LEAD_STA
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.CONTACT, description: description?.trim() || "Contacte comercial registrat.", createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function scheduleManualFollowUp({ lead, title, dueAt, status = LEAD_STATUSES.CONTACT_LATER }) {
@@ -144,38 +125,47 @@ export async function scheduleManualFollowUp({ lead, title, dueAt, status = LEAD
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title: title.trim(), type: TASK_TYPES.MANUAL, status: TASK_STATUSES.PENDING, automatic: false, dueAt: dueTimestamp, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NEXT_ACTION_SET, description: `${title.trim()} programat per al ${new Date(dueAt).toLocaleDateString("ca-ES")}.`, createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status, nextActionTitle: title.trim(), nextActionAt: dueTimestamp, updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function markReplied(lead) {
-  const user = getCurrentUser(); const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
+  const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.REPLIED, description: "La futura viatgera ha contestat.", createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.REPLIED, nextActionAt: null, nextActionTitle: "", lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function markNoResponse(lead) {
-  const user = getCurrentUser(); const noResponseCount = Number(lead.noResponseCount || 0) + 1; const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
-  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NO_RESPONSE, description: noResponseCount === 1 ? "Primer seguiment sense resposta." : "Segon seguiment sense resposta.", createdBy: user.uid, createdAt: serverTimestamp() });
-  const isFinalReview = noResponseCount >= FOLLOW_UP_DEFAULTS.MAX_NO_RESPONSE; const days = isFinalReview ? FOLLOW_UP_DEFAULTS.FINAL_REVIEW_DAYS : FOLLOW_UP_DEFAULTS.SECOND_DAYS; const title = isFinalReview ? "Revisió final sense resposta" : "Segon seguiment pendent"; const dueAt = Timestamp.fromDate(addDays(new Date(), days));
+  const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  const noResponseCount = Number(lead.noResponseCount || 0) + 1;
+  const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
+  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NO_RESPONSE, description: noResponseCount === 1 ? "Primer seguiment sense resposta." : `${noResponseCount} seguiments sense resposta.`, createdBy: user.uid, createdAt: serverTimestamp() });
+  const isFinalReview = noResponseCount >= FOLLOW_UP_DEFAULTS.MAX_NO_RESPONSE;
+  const days = isFinalReview ? FOLLOW_UP_DEFAULTS.FINAL_REVIEW_DAYS : FOLLOW_UP_DEFAULTS.SECOND_DAYS;
+  const title = isFinalReview ? "Revisió final sense resposta" : "Segon seguiment pendent";
+  const dueAt = Timestamp.fromDate(addDays(new Date(), days));
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title, type: isFinalReview ? TASK_TYPES.FINAL_REVIEW : TASK_TYPES.SECOND_FOLLOW_UP, status: TASK_STATUSES.PENDING, automatic: true, sequence: noResponseCount + 1, dueAt, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.FOLLOW_UP, noResponseCount, nextActionTitle: title, nextActionAt: dueAt, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
+  return { noResponseCount, nextActionTitle: title, nextActionAt: dueAt };
 }
 
 export async function confirmBooking(lead) {
-  const user = getCurrentUser(); const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
+  const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.BOOKING_CONFIRMED, description: "Reserva confirmada.", createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, nextActionAt: null, nextActionTitle: "", updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function markLeadLost({ lead, reason, note = "" }) {
-  const user = getCurrentUser(); if (!reason || !Object.values(LOST_REASONS).includes(reason)) throw new Error("LOST_REASON_REQUIRED");
+  const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  if (!reason || !Object.values(LOST_REASONS).includes(reason)) throw new Error("LOST_REASON_REQUIRED");
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.LEAD_LOST, description: `Lead marcat com a perdut.${note?.trim() ? ` ${note.trim()}` : ""}`, lostReason: reason, createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.LOST, lostReason: reason, lostNote: note?.trim() || "", lostAt: serverTimestamp(), nextActionAt: null, nextActionTitle: "", updatedBy: user.uid, updatedAt: serverTimestamp() });
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function resolveTripClosedTask({ lead, task, decision }) {
@@ -190,7 +180,7 @@ export async function resolveTripClosedTask({ lead, task, decision }) {
   if (decision === "NEXT_YEAR") Object.assign(update, { status: LEAD_STATUSES.CONTACT_LATER, commercialList: "NEXT_YEAR", commercialListTripId: task.tripId });
   if (decision === "LOST") Object.assign(update, { status: LEAD_STATUSES.LOST, lostReason: LOST_REASONS.DATES, lostNote: "Viatge tancat", lostAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), update);
-  await batch.commit();
+  await commitLeadBatch(batch);
 }
 
 export async function completeTask(taskId) { await updateDoc(doc(db, "tasks", taskId), { status: TASK_STATUSES.COMPLETED, completedAt: serverTimestamp(), updatedAt: serverTimestamp() }); }
