@@ -1,4 +1,4 @@
-import { getLeads } from "../services/lead.service.js";
+import { getLeads, invalidateLeadsCache } from "../services/lead.service.js";
 import { getTrips } from "../services/trip.service.js";
 
 const STATUS_LABELS = {
@@ -54,6 +54,9 @@ let analyticsState = {
   source: "",
   status: ""
 };
+let analyticsDirty = false;
+let analyticsRefreshing = false;
+let analyticsUpdatedAt = null;
 
 function root() {
   return document.querySelector(".app-content");
@@ -134,20 +137,39 @@ function percentage(part, total) {
   return total ? Math.round((part / total) * 1000) / 10 : 0;
 }
 
+function isBookingForSelection(lead) {
+  if (lead.status !== "BOOKING_CONFIRMED") return false;
+  if (!analyticsState.tripId) return true;
+  return (lead.bookingTripId || lead.tripIds?.[0] || "") === analyticsState.tripId;
+}
+
 function formatPercent(value) {
   return `${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(value)}%`;
 }
 
-function filteredLeads() {
-  const { start, end } = getDateBounds();
+function matchesDimensionFilters(lead, { bookingTripOnly = false } = {}) {
+  if (analyticsState.tripId) {
+    const reservedTripId = lead.bookingTripId || lead.tripIds?.[0] || "";
+    if (bookingTripOnly ? reservedTripId !== analyticsState.tripId : !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
+  }
+  if (analyticsState.source && sourceKey(lead) !== analyticsState.source) return false;
+  if (analyticsState.status && lead.status !== analyticsState.status) return false;
+  return true;
+}
+
+function filteredLeads(bounds = getDateBounds()) {
+  const { start, end } = bounds;
   return analyticsState.leads.filter((lead) => {
     const createdAt = toDate(lead.createdAt);
     if (!createdAt || createdAt < start || createdAt > end) return false;
-    if (analyticsState.tripId && !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
-    if (analyticsState.source && sourceKey(lead) !== analyticsState.source) return false;
-    if (analyticsState.status && lead.status !== analyticsState.status) return false;
-    return true;
+    return matchesDimensionFilters(lead);
   });
+}
+
+function previousBounds(bounds) {
+  if (analyticsState.range === "all") return null;
+  const duration = bounds.end.getTime() - bounds.start.getTime() + 1;
+  return { start: new Date(bounds.start.getTime() - duration), end: new Date(bounds.start.getTime() - 1) };
 }
 
 function leadReachedStage(lead, stage) {
@@ -171,7 +193,7 @@ function groupBy(items, getKey) {
 
 function aggregateSources(leads) {
   return [...groupBy(leads, sourceKey).entries()].map(([key, rows]) => {
-    const bookings = rows.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+    const bookings = rows.filter(isBookingForSelection).length;
     return { key, label: SOURCE_LABELS[key] || "Altres", leads: rows.length, bookings, conversion: percentage(bookings, rows.length) };
   }).sort((a, b) => b.leads - a.leads);
 }
@@ -190,7 +212,7 @@ function aggregateTrips(leads) {
 
   return [...rows.entries()].map(([tripId, tripLeads]) => {
     const trip = tripMap.get(tripId);
-    const bookings = tripLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+    const bookings = tripLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED" && (lead.bookingTripId || lead.tripIds?.[0]) === tripId).length;
     const lost = tripLeads.filter((lead) => lead.status === "LOST");
     const reasons = [...groupBy(lost, (lead) => lead.lostReason || "OTHER").entries()]
       .map(([reason, values]) => ({ reason, count: values.length }))
@@ -207,8 +229,18 @@ function aggregateTrips(leads) {
   });
 }
 
-function renderMetric(label, value, hint = "") {
-  return `<article class="analytics-metric"><span>${label}</span><strong>${value}</strong>${hint ? `<small>${hint}</small>` : ""}</article>`;
+function metricTrend(current, previous, { inverse = false, points = false } = {}) {
+  if (previous == null) return { label: "Sense comparativa", tone: "neutral", icon: "→" };
+  const diff = points ? current - previous : previous ? ((current - previous) / previous) * 100 : current ? 100 : 0;
+  const rounded = Math.round(diff * 10) / 10;
+  const positive = inverse ? rounded < 0 : rounded > 0;
+  const negative = inverse ? rounded > 0 : rounded < 0;
+  const value = points ? `${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(rounded)} punts` : formatPercent(rounded);
+  return { label: `${rounded > 0 ? "+" : ""}${value} vs. període anterior`, tone: positive ? "good" : negative ? "bad" : "neutral", icon: rounded > 0 ? "↗" : rounded < 0 ? "↘" : "→" };
+}
+
+function renderMetric(label, value, hint, trend, accent = "") {
+  return `<article class="analytics-premium-metric ${accent ? `is-${accent}` : ""}"><div><span>${label}</span><i></i></div><strong>${value}</strong><small>${hint}</small><span class="analytics-premium-trend is-${trend.tone}"><b>${trend.icon}</b>${escapeHtml(trend.label)}</span></article>`;
 }
 
 function renderFilters() {
@@ -216,7 +248,10 @@ function renderFilters() {
   const sourceOptions = Object.entries(SOURCE_LABELS).map(([key, label]) => `<option value="${key}" ${analyticsState.source === key ? "selected" : ""}>${label}</option>`).join("");
   const statusOptions = Object.entries(STATUS_LABELS).map(([key, label]) => `<option value="${key}" ${analyticsState.status === key ? "selected" : ""}>${label}</option>`).join("");
 
+  const { start, end } = getDateBounds();
+  const dateFormat = new Intl.DateTimeFormat("ca-ES", { day: "numeric", month: "short", year: start.getFullYear() !== end.getFullYear() ? "numeric" : undefined });
   return `<section class="analytics-filters">
+    <div class="analytics-premium-filter-title"><div><span class="section-kicker">Període analitzat</span><strong>${dateFormat.format(start)} — ${dateFormat.format(end)}</strong></div><button type="button" data-analytics-reset>Restablir filtres</button></div>
     <div class="analytics-range-tabs">
       ${[
         ["today", "Avui"], ["week", "Aquesta setmana"], ["month", "Aquest mes"], ["year", "Aquest any"], ["all", "Tot"], ["custom", "Personalitzat"]
@@ -232,6 +267,33 @@ function renderFilters() {
       </div>
     </div>
   </section>`;
+}
+
+function renderSourcePerformance(rows) {
+  const max = Math.max(...rows.map((row) => row.leads), 1);
+  return `<article class="analytics-card analytics-source-performance"><header><div><span class="section-kicker">Canals</span><h2>Origen i qualitat dels leads</h2></div><span>Volum · reserves · conversió</span></header><div>${rows.length ? rows.map((row) => `<div class="analytics-source-row"><div><strong>${escapeHtml(row.label)}</strong><span>${row.leads} leads · ${row.bookings} reserves</span></div><div class="analytics-bar"><span style="width:${Math.max((row.leads / max) * 100, 4)}%"></span></div><b>${formatPercent(row.conversion)}</b></div>`).join("") : '<p class="analytics-empty">No hi ha dades d’origen en aquest període.</p>'}</div></article>`;
+}
+
+function buildInsights(leads, sources, trips) {
+  if (!leads.length) return [{ tone: "neutral", title: "Encara no hi ha dades", text: "Amplia el període o elimina algun filtre per veure una lectura comercial completa." }];
+  const rows = [];
+  const volume = sources[0];
+  const quality = [...sources].filter((row) => row.leads >= 3).sort((a, b) => b.conversion - a.conversion || b.bookings - a.bookings)[0];
+  const demand = [...trips].sort((a, b) => b.leads - a.leads)[0];
+  const lost = leads.filter((lead) => lead.status === "LOST");
+  const reasons = [...groupBy(lost, (lead) => lead.lostReason || "OTHER").entries()].map(([key, values]) => ({ key, count: values.length })).sort((a, b) => b.count - a.count);
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 3);
+  const stalled = leads.filter((lead) => ["NEW", "INFO_SENT"].includes(lead.status) && (toDate(lead.updatedAt) || toDate(lead.createdAt)) < cutoff).length;
+  if (volume) rows.push({ tone: "brand", title: `${volume.label} aporta més volum`, text: `${volume.leads} leads i ${volume.bookings} reserves en el període seleccionat.` });
+  if (quality) rows.push({ tone: "success", title: `${quality.label} converteix millor`, text: `${formatPercent(quality.conversion)} de conversió sobre una mostra de ${quality.leads} leads.` });
+  if (demand) rows.push({ tone: demand.conversion < 10 && demand.leads >= 3 ? "warning" : "brand", title: `${demand.name} genera més interès`, text: `${demand.leads} interessades, ${demand.bookings} reserves i ${formatPercent(demand.conversion)} de conversió.` });
+  if (stalled) rows.push({ tone: "warning", title: `${stalled} leads poden quedar enrere`, text: "Continuen nous o amb informació enviada després de més de tres dies." });
+  else if (reasons[0]) rows.push({ tone: "danger", title: `${LOST_LABELS[reasons[0].key] || "Altres"} és el principal fre`, text: `${reasons[0].count} dels ${lost.length} leads perduts indiquen aquest motiu.` });
+  return rows.slice(0, 4);
+}
+
+function renderInsights(items) {
+  return `<section class="analytics-premium-insights"><header><div><span class="section-kicker">Lectura automàtica</span><h2>Què ens diuen les dades?</h2></div><span>Orientació basada en el període seleccionat</span></header><div>${items.map((item) => `<article class="is-${item.tone}"><i></i><div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.text)}</p></div></article>`).join("")}</div></section>`;
 }
 
 function renderRanking(title, eyebrow, rows, valueKey, secondaryKey, emptyText) {
@@ -269,7 +331,7 @@ function renderFunnel(leads) {
     label: `${stage.label} → ${stages[index + 1].label}`,
     drop: stage.count - stages[index + 1].count
   })).sort((a, b) => b.drop - a.drop);
-  return `<article class="analytics-card analytics-funnel-card"><header><div><span class="section-kicker">Procés comercial</span><h2>Embut comercial</h2></div>${drops[0] ? `<span>Major caiguda: ${escapeHtml(drops[0].label)}</span>` : ""}</header><div class="analytics-funnel">${stages.map((stage, index) => `<div class="analytics-funnel-stage" style="width:${Math.max((stage.count / max) * 100, 18)}%"><span>${stage.label}</span><strong>${stage.count}</strong>${index < stages.length - 1 ? `<small>${stages[index].count ? formatPercent(percentage(stages[index + 1].count, stages[index].count)) : "0%"} continuen</small>` : ""}</div>`).join("")}</div></article>`;
+  return `<article class="analytics-card analytics-funnel-card"><header><div><span class="section-kicker">Estimació segons l’estat actual</span><h2>Embut comercial</h2></div>${drops[0] ? `<span>Major caiguda: ${escapeHtml(drops[0].label)}</span>` : ""}</header><div class="analytics-funnel">${stages.map((stage, index) => `<div class="analytics-funnel-stage" style="width:${Math.max((stage.count / max) * 100, 18)}%"><span>${stage.label}</span><strong>${stage.count}</strong>${index < stages.length - 1 ? `<small>${stages[index].count ? formatPercent(percentage(stages[index + 1].count, stages[index].count)) : "0%"} continuen</small>` : ""}</div>`).join("")}</div></article>`;
 }
 
 function periodKey(date, mode) {
@@ -281,19 +343,24 @@ function periodKey(date, mode) {
   return localIso(first);
 }
 
-function renderEvolution(leads) {
+function renderEvolution() {
   const { start, end } = getDateBounds();
   const duration = Math.max(1, Math.round((end - start) / 86400000));
   const mode = duration <= 31 ? "day" : duration <= 180 ? "week" : "month";
   const grouped = new Map();
-  leads.forEach((lead) => {
-    const date = toDate(lead.createdAt);
-    if (!date) return;
+  const inRange = (date) => date && date >= start && date <= end;
+  const rowFor = (date) => {
     const key = periodKey(date, mode);
     if (!grouped.has(key)) grouped.set(key, { key, leads: 0, bookings: 0 });
-    const row = grouped.get(key);
-    row.leads += 1;
-    if (lead.status === "BOOKING_CONFIRMED") row.bookings += 1;
+    return grouped.get(key);
+  };
+  analyticsState.leads.forEach((lead) => {
+    if (!matchesDimensionFilters(lead)) return;
+    const createdAt = toDate(lead.createdAt);
+    if (inRange(createdAt)) rowFor(createdAt).leads += 1;
+    if (lead.status !== "BOOKING_CONFIRMED" || !matchesDimensionFilters(lead, { bookingTripOnly: true })) return;
+    const bookedAt = toDate(lead.bookedAt) || createdAt;
+    if (inRange(bookedAt)) rowFor(bookedAt).bookings += 1;
   });
   const rows = [...grouped.values()].sort((a, b) => a.key.localeCompare(b.key)).slice(-14);
   const max = Math.max(...rows.map((row) => row.leads), 1);
@@ -302,34 +369,40 @@ function renderEvolution(leads) {
 
 function renderRadar(rows) {
   const sorted = [...rows].sort((a, b) => b.leads - a.leads);
-  return `<article class="analytics-card analytics-radar"><header><div><span class="section-kicker">Decisió comercial</span><h2>Radar comercial</h2></div><span>${sorted.length} viatges amb activitat</span></header><div class="analytics-table-wrap"><table><thead><tr><th>Viatge</th><th>Leads</th><th>Reserves</th><th>Conversió</th><th>Perduts</th><th>Principal motiu</th></tr></thead><tbody>${sorted.length ? sorted.map((row) => `<tr><td><strong>${escapeHtml(row.name)}</strong></td><td>${row.leads}</td><td>${row.bookings}</td><td><span class="analytics-conversion ${row.conversion >= 20 ? "is-good" : row.conversion < 8 ? "is-low" : ""}">${formatPercent(row.conversion)}</span></td><td>${row.lost}</td><td>${escapeHtml(row.mainLostReason)}</td></tr>`).join("") : '<tr><td colspan="6" class="analytics-empty">No hi ha viatges amb activitat en aquest període.</td></tr>'}</tbody></table></div></article>`;
+  return `<article class="analytics-card analytics-radar"><header><div><span class="section-kicker">Decisió comercial</span><h2>Radar comercial</h2></div><span>Selecciona un viatge per filtrar · ${sorted.length} amb activitat</span></header><div class="analytics-table-wrap"><table><thead><tr><th>Viatge</th><th>Leads</th><th>Reserves</th><th>Conversió</th><th>Perduts</th><th>Principal motiu</th></tr></thead><tbody>${sorted.length ? sorted.map((row) => `<tr data-analytics-trip-filter="${row.id}" tabindex="0"><td><strong>${escapeHtml(row.name)}</strong></td><td>${row.leads}</td><td>${row.bookings}</td><td><span class="analytics-conversion ${row.conversion >= 20 ? "is-good" : row.conversion < 8 ? "is-low" : ""}">${formatPercent(row.conversion)}</span></td><td>${row.lost}</td><td>${escapeHtml(row.mainLostReason)}</td></tr>`).join("") : '<tr><td colspan="6" class="analytics-empty">No hi ha viatges amb activitat en aquest període.</td></tr>'}</tbody></table></div></article>`;
 }
 
 function renderAnalytics() {
-  const leads = filteredLeads();
-  const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+  const bounds = getDateBounds();
+  const leads = filteredLeads(bounds);
+  const priorBounds = previousBounds(bounds);
+  const previousLeads = priorBounds ? filteredLeads(priorBounds) : [];
+  const bookings = leads.filter(isBookingForSelection).length;
   const followUps = leads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(lead.status)).length;
   const lost = leads.filter((lead) => lead.status === "LOST").length;
   const conversion = percentage(bookings, leads.length);
+  const previousBookings = previousLeads.filter(isBookingForSelection).length;
+  const previousFollowUps = previousLeads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(lead.status)).length;
+  const previousLost = previousLeads.filter((lead) => lead.status === "LOST").length;
+  const previousConversion = percentage(previousBookings, previousLeads.length);
   const sources = aggregateSources(leads);
   const trips = aggregateTrips(leads);
   const topInterest = [...trips].sort((a, b) => b.leads - a.leads);
   const topConversion = [...trips].filter((row) => row.leads >= 2).sort((a, b) => b.conversion - a.conversion || b.leads - a.leads);
+  const freshness = analyticsDirty ? "Hi ha canvis pendents d’actualitzar" : analyticsUpdatedAt ? `Actualitzat a les ${analyticsUpdatedAt.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}` : "Dades preparades";
 
   return `<section class="analytics-page">
-    <header class="page-heading"><div><span class="section-kicker">Control comercial</span><h1>Analítica Comercial</h1><p>Entén en menys d’un minut què funciona, què converteix i on cal actuar.</p></div></header>
+    <header class="analytics-premium-hero"><div><span class="section-kicker">Control comercial</span><h1>Analítica Comercial</h1><p>Una lectura clara de què atrau futures viatgeres, què converteix i on convé actuar avui.</p></div><aside><span>Taxa de conversió</span><strong>${formatPercent(conversion)}</strong><small>${bookings} reserves de ${leads.length} leads</small><button type="button" data-refresh-analytics ${analyticsRefreshing ? "disabled" : ""}>${analyticsRefreshing ? "Actualitzant…" : "Actualitzar dades"}</button><em data-analytics-freshness>${freshness}</em></aside></header>
     ${renderFilters()}
-    <section class="analytics-metrics">
-      ${renderMetric("Leads nous", leads.length, "Entrades en el període")}
-      ${renderMetric("Reserves confirmades", bookings, "Conversió comercial")}
-      ${renderMetric("En seguiment", followUps, "Necessiten continuïtat")}
-      ${renderMetric("Leads perduts", lost, "Amb motiu registrat")}
-      ${renderMetric("Taxa de conversió", formatPercent(conversion), `${bookings} de ${leads.length}`)}
+    <section class="analytics-premium-metrics">
+      ${renderMetric("Leads rebuts", leads.length, "Entrades en el període", metricTrend(leads.length, priorBounds ? previousLeads.length : null), "brand")}
+      ${renderMetric("Reserves confirmades", bookings, "Conversió comercial", metricTrend(bookings, priorBounds ? previousBookings : null), "success")}
+      ${renderMetric("Oportunitats actives", followUps, "En seguiment o decisió", metricTrend(followUps, priorBounds ? previousFollowUps : null))}
+      ${renderMetric("Leads perduts", lost, "Amb motiu registrat", metricTrend(lost, priorBounds ? previousLost : null, { inverse: true }), lost ? "warning" : "")}
+      ${renderMetric("Conversió", formatPercent(conversion), `${bookings} de ${leads.length} leads`, metricTrend(conversion, priorBounds ? previousConversion : null, { points: true }), "dark")}
     </section>
-    <section class="analytics-two-column">
-      ${renderRanking("Origen dels leads", "Canals", sources, "leads", "", "No hi ha dades d’origen.")}
-      ${renderRanking("Canals que converteixen millor", "Conversió", [...sources].sort((a, b) => b.conversion - a.conversion), "conversion", "", "No hi ha dades de conversió.")}
-    </section>
+    ${renderInsights(buildInsights(leads, sources, trips))}
+    ${renderSourcePerformance(sources)}
     <section class="analytics-two-column">
       ${renderRanking("Viatges que generen més interès", "Demanda", topInterest, "leads", "", "No hi ha viatges amb consultes.")}
       ${renderRanking("Viatges amb millor conversió", "Rendiment", topConversion, "conversion", "", "Encara no hi ha prou dades.")}
@@ -339,52 +412,62 @@ function renderAnalytics() {
       ${renderLostReasons(leads)}
     </section>
     ${renderFunnel(leads)}
-    ${renderEvolution(leads)}
+    ${renderEvolution()}
     ${renderRadar(trips)}
   </section>`;
 }
 
 function setAnalyticsActive() {
   document.querySelectorAll(".sidebar-nav__item").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.analyticsNav === "true");
+    button.classList.toggle("is-active", button.dataset.navKey === "analytics");
   });
 }
 
-export async function showAnalyticsView() {
+export async function showAnalyticsView({ force = false } = {}) {
   const container = root();
   if (!container) return;
   setAnalyticsActive();
   container.innerHTML = '<section class="analytics-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la lectura comercial...</p></div></section>';
   try {
+    if (force) invalidateLeadsCache();
     const [leads, trips] = await Promise.all([getLeads(), getTrips()]);
     analyticsState.leads = leads;
     analyticsState.trips = trips;
+    analyticsDirty = false;
+    analyticsUpdatedAt = new Date();
+    analyticsRefreshing = false;
     container.innerHTML = renderAnalytics();
   } catch (error) {
     console.error("No s'ha pogut carregar l'analítica comercial:", error);
     container.innerHTML = '<div class="leads-error">No s’ha pogut carregar l’Analítica Comercial.</div>';
+  } finally {
+    analyticsRefreshing = false;
   }
 }
 
-function ensureAnalyticsNav() {
-  const nav = document.querySelector(".sidebar-nav");
-  if (!nav || nav.querySelector('[data-analytics-nav="true"]')) return;
-  const tripsButton = [...nav.querySelectorAll(".sidebar-nav__item")].find((button) => button.textContent.trim().startsWith("Viatges"));
-  const button = document.createElement("button");
-  button.className = "sidebar-nav__item";
-  button.type = "button";
-  button.dataset.analyticsNav = "true";
-  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /></svg><span>Analítica</span>';
-  if (tripsButton) tripsButton.insertAdjacentElement("afterend", button);
-  else nav.appendChild(button);
+function rerenderAnalytics() {
+  const container = root();
+  if (container?.querySelector(".analytics-page")) container.innerHTML = renderAnalytics();
 }
 
-const observer = new MutationObserver(ensureAnalyticsNav);
-observer.observe(document.body, { childList: true, subtree: true });
-ensureAnalyticsNav();
+function selectRadarTrip(row) {
+  if (!row) return;
+  analyticsState.tripId = row.dataset.analyticsTripFilter;
+  rerenderAnalytics();
+  root()?.scrollTo?.({ top: 0, behavior: "smooth" });
+}
 
 document.addEventListener("click", (event) => {
-  if (event.target.closest('[data-analytics-nav="true"]')) showAnalyticsView();
+  if (event.target.closest('[data-nav-key="analytics"]')) showAnalyticsView();
+  if (event.target.closest("[data-refresh-analytics]")) {
+    analyticsRefreshing = true;
+    showAnalyticsView({ force: true });
+  }
+  if (event.target.closest("[data-analytics-reset]")) {
+    analyticsState = { ...analyticsState, range: "month", startDate: "", endDate: "", tripId: "", source: "", status: "" };
+    rerenderAnalytics();
+  }
+  selectRadarTrip(event.target.closest("[data-analytics-trip-filter]"));
   const rangeButton = event.target.closest("[data-analytics-range]");
   if (rangeButton) {
     analyticsState.range = rangeButton.dataset.analyticsRange;
@@ -393,13 +476,25 @@ document.addEventListener("click", (event) => {
       analyticsState.startDate = localIso(defaults.start);
       analyticsState.endDate = localIso(defaults.end);
     }
-    root().innerHTML = renderAnalytics();
+    rerenderAnalytics();
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (["Enter", " "].includes(event.key)) selectRadarTrip(event.target.closest("[data-analytics-trip-filter]"));
 });
 
 document.addEventListener("change", (event) => {
   const field = event.target.dataset.analyticsFilter;
   if (!field) return;
   analyticsState[field] = event.target.value;
-  root().innerHTML = renderAnalytics();
+  rerenderAnalytics();
+});
+
+["travelflow:tasks-updated", "travelflow:lead-created", "travelflow:lead-deleted"].forEach((eventName) => {
+  window.addEventListener(eventName, () => {
+    analyticsDirty = true;
+    const label = document.querySelector("[data-analytics-freshness]");
+    if (label) label.textContent = "Hi ha canvis pendents d’actualitzar";
+  });
 });
