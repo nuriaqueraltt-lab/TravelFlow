@@ -3,6 +3,7 @@ import { getTrips } from "../services/trip.service.js";
 import { getLeads } from "../services/lead.service.js";
 import { showLeadDetail } from "./leads.controller.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
+import { getTripInterestStatus, hasActiveTripInterests, isBookedForTrip, TRIP_INTEREST_TERMINAL_STATUSES } from "../services/trip-interest.model.js";
 
 const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
 const TERMINAL_STATUSES = new Set(["LOST", "BOOKING_CONFIRMED"]);
@@ -27,7 +28,7 @@ function filterCommercialTasks(tasks, leads) {
   const leadById = new Map(leads.map((lead) => [lead.id, lead]));
   return tasks.filter((task) => {
     const lead = leadById.get(task.leadId);
-    return lead && lead.active !== false && !TERMINAL_STATUSES.has(lead.status);
+    return lead && lead.active !== false && (!TERMINAL_STATUSES.has(lead.status) || hasActiveTripInterests(lead));
   });
 }
 
@@ -44,8 +45,8 @@ function renderTripCards(trips, leads) {
   if (!upcoming.length) return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div></header><div class="daily-empty"><strong>No hi ha viatges amb data futura</strong><span>Afegeix o revisa les dates des del menú Viatges.</span></div></section>`;
   return `<section class="dashboard-trips"><header class="dashboard-trips__header"><div><span class="section-kicker">Control comercial</span><h2>Pròxims viatges</h2></div><p>Clica una targeta per veure només els leads d’aquell viatge.</p></header><div class="dashboard-trip-grid">${upcoming.map((trip) => {
     const linkedLeads = leads.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(trip.id));
-    const activeCount = linkedLeads.filter((lead) => !TERMINAL_STATUSES.has(lead.status)).length;
-    const bookedCount = linkedLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+    const activeCount = linkedLeads.filter((lead) => !TRIP_INTEREST_TERMINAL_STATUSES.has(getTripInterestStatus(lead, trip.id))).length;
+    const bookedCount = linkedLeads.filter((lead) => isBookedForTrip(lead, trip.id)).length;
     const imageUrl = safeImageUrl(trip.imageUrl, trip.id || trip.name);
     const closingText = trip.closingDate ? `Tancament ${formatDate(`${trip.closingDate}T12:00:00`)}` : "Tancament pendent";
     return `<button class="dashboard-trip-card" type="button" data-dashboard-trip="${trip.id}" style="--trip-image:url('${escapeHtml(imageUrl)}')"><span class="dashboard-trip-card__overlay"></span><span class="dashboard-trip-card__top"><span class="dashboard-trip-card__date">${formatDate(`${trip.startDate}T12:00:00`)}</span><span class="dashboard-trip-card__closing ${trip.closingDate ? "" : "is-pending"}">${closingText}</span></span><span class="dashboard-trip-card__content"><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${activeCount} leads actius${bookedCount ? ` · ${bookedCount} reserves` : ""}</span></span><span class="dashboard-trip-card__arrow">Veure leads →</span></button>`;

@@ -14,6 +14,7 @@ import { getCurrentUser } from "./auth.service.js";
 import { invalidateLeadsCache } from "./lead.service.js";
 import { invalidateTasksCache } from "./workflow.service.js";
 import { ACTIVITY_TYPES, LEAD_STATUSES, TASK_STATUSES, TASK_TYPES } from "../config/app.constants.js";
+import { compatibleLeadStatus, hasActiveTripInterests } from "./trip-interest.model.js";
 
 function asDueTimestamp(value) {
   if (!value) return null;
@@ -51,7 +52,7 @@ export async function saveManualNextAction({ lead, title, dueAt }) {
   const dueTimestamp = asDueTimestamp(dueAt);
   if (!user) throw new Error("AUTH_REQUIRED");
   if (!lead?.id || !cleanTitle || !dueTimestamp) throw new Error("TASK_DATA_REQUIRED");
-  if ([LEAD_STATUSES.LOST, LEAD_STATUSES.BOOKING_CONFIRMED].includes(lead.status)) throw new Error("TERMINAL_LEAD");
+  if (lead.status === LEAD_STATUSES.LOST || (lead.status === LEAD_STATUSES.BOOKING_CONFIRMED && !hasActiveTripInterests(lead))) throw new Error("TERMINAL_LEAD");
 
   const pendingTasks = await getPendingTaskDocuments(lead.id);
   const batch = writeBatch(db);
@@ -80,7 +81,7 @@ export async function saveManualNextAction({ lead, title, dueAt }) {
   });
 
   batch.update(doc(db, "leads", lead.id), {
-    status: LEAD_STATUSES.CONTACT_LATER,
+    status: compatibleLeadStatus(lead, LEAD_STATUSES.CONTACT_LATER),
     nextActionTitle: cleanTitle,
     nextActionAt: dueTimestamp,
     updatedBy: user.uid,

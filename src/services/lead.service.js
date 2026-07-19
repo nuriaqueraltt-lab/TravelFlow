@@ -1,7 +1,8 @@
-import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { collection, deleteField, doc, getDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { ACTIVITY_TYPES, FOLLOW_UP_DEFAULTS, LEAD_PRIORITIES, LEAD_STATUSES, LEAD_TEMPERATURES, TASK_STATUSES, TASK_TYPES } from "../config/app.constants.js";
+import { buildTripInterests } from "./trip-interest.model.js";
 
 const LEADS_CACHE_TTL = 5 * 60 * 1000;
 let leadsCache = null;
@@ -78,12 +79,13 @@ export async function createLead(input) {
   const phone = input.phone?.trim() ?? "";
   const tripIds = parseArrayValue(input.tripIds);
   const tripLabels = parseArrayValue(input.tripLabels);
+  const tripInterests = buildTripInterests({}, tripIds, tripLabels);
   const leadData = {
     firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone,
     phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email),
     instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "",
     channel: input.channel, source: input.source, entryPreset: input.entryPreset ?? "",
-    tripIds, tripLabels, interest: tripLabels.join(", "), notes: input.notes?.trim() ?? "",
+    tripIds, tripLabels, tripInterests, interest: tripLabels.join(", "), notes: input.notes?.trim() ?? "",
     status: LEAD_STATUSES.NEW, priority: LEAD_PRIORITIES.NORMAL, temperature: LEAD_TEMPERATURES.WARM,
     ownerId: currentUser.uid, createdBy: currentUser.uid, updatedBy: currentUser.uid,
     active: true, noResponseCount: 0, lastContactAt: lastContactTimestamp,
@@ -102,12 +104,15 @@ export async function createLead(input) {
   return { id: leadRef.id, fullName, channel: input.channel, source: input.source, tripIds, tripLabels, nextActionTitle: "Primer seguiment pendent", nextActionAt: firstFollowUpAt };
 }
 
-export async function updateLead(leadId, input) {
+export async function updateLead(leadId, input, currentLead = {}) {
   const currentUser = getCurrentUser(); if (!currentUser) throw new Error("AUTH_REQUIRED");
   const firstName = input.firstName?.trim(); const lastName = input.lastName?.trim() ?? ""; if (!firstName) throw new Error("FIRST_NAME_REQUIRED");
   const tripIds = parseArrayValue(input.tripIds); const tripLabels = parseArrayValue(input.tripLabels); const fullName = [firstName, lastName].filter(Boolean).join(" "); const phone = input.phone?.trim() ?? "";
-  const update = { firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone, phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email), instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "", notes: input.notes?.trim() ?? "", tripIds, tripLabels, interest: tripLabels.join(", "), updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
-  await updateDoc(doc(db, "leads", leadId), update); upsertLeadCache({ id: leadId, ...update });
+  const suppliedStatuses = input.tripStatuses ? JSON.parse(input.tripStatuses) : {};
+  const tripInterests = buildTripInterests(currentLead, tripIds, tripLabels, suppliedStatuses);
+  const bookingRemoved = currentLead.bookingTripId && !tripIds.includes(currentLead.bookingTripId);
+  const update = { firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone, phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email), instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "", notes: input.notes?.trim() ?? "", tripIds, tripLabels, tripInterests, interest: tripLabels.join(", "), ...(bookingRemoved ? { status: tripInterests[tripIds[0]]?.status || LEAD_STATUSES.NEW, bookingTripId: deleteField(), bookingTripNameSnapshot: deleteField(), bookingDui: deleteField(), bookedAt: deleteField() } : {}), updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
+  await updateDoc(doc(db, "leads", leadId), update); upsertLeadCache({ id: leadId, ...update, ...(bookingRemoved ? { bookingTripId: "", bookingTripNameSnapshot: "", bookingDui: false, bookedAt: null } : {}) });
   tripLeadsCache.clear();
   confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null;
   const taskSnapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId), where("status", "==", TASK_STATUSES.PENDING)));

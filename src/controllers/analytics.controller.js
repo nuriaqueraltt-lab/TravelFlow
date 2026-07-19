@@ -1,5 +1,6 @@
 import { getLeads, invalidateLeadsCache } from "../services/lead.service.js";
 import { getTrips } from "../services/trip.service.js";
+import { getTripInterestStatus, isBookedForTrip } from "../services/trip-interest.model.js";
 
 const STATUS_LABELS = {
   NEW: "Nou",
@@ -140,7 +141,7 @@ function percentage(part, total) {
 function isBookingForSelection(lead) {
   if (lead.status !== "BOOKING_CONFIRMED") return false;
   if (!analyticsState.tripId) return true;
-  return (lead.bookingTripId || lead.tripIds?.[0] || "") === analyticsState.tripId;
+  return isBookedForTrip(lead, analyticsState.tripId);
 }
 
 function formatPercent(value) {
@@ -149,8 +150,7 @@ function formatPercent(value) {
 
 function matchesDimensionFilters(lead, { bookingTripOnly = false } = {}) {
   if (analyticsState.tripId) {
-    const reservedTripId = lead.bookingTripId || lead.tripIds?.[0] || "";
-    if (bookingTripOnly ? reservedTripId !== analyticsState.tripId : !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
+    if (bookingTripOnly ? !isBookedForTrip(lead, analyticsState.tripId) : !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
   }
   if (analyticsState.source && sourceKey(lead) !== analyticsState.source) return false;
   if (analyticsState.status && lead.status !== analyticsState.status) return false;
@@ -212,8 +212,8 @@ function aggregateTrips(leads) {
 
   return [...rows.entries()].map(([tripId, tripLeads]) => {
     const trip = tripMap.get(tripId);
-    const bookings = tripLeads.filter((lead) => lead.status === "BOOKING_CONFIRMED" && (lead.bookingTripId || lead.tripIds?.[0]) === tripId).length;
-    const lost = tripLeads.filter((lead) => lead.status === "LOST");
+    const bookings = tripLeads.filter((lead) => isBookedForTrip(lead, tripId)).length;
+    const lost = tripLeads.filter((lead) => getTripInterestStatus(lead, tripId) === "LOST");
     const reasons = [...groupBy(lost, (lead) => lead.lostReason || "OTHER").entries()]
       .map(([reason, values]) => ({ reason, count: values.length }))
       .sort((a, b) => b.count - a.count);

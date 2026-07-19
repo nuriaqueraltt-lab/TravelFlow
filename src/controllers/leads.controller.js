@@ -18,6 +18,7 @@ import {
   recordManualContact
 } from "../services/workflow.service.js";
 import { clearManualNextAction, saveManualNextAction } from "../services/next-action.service.js";
+import { getTripInterestStatus, hasActiveTripInterests } from "../services/trip-interest.model.js";
 
 const CHANNEL_LABELS = { WEB: "Web", WHATSAPP: "WhatsApp", INSTAGRAM: "Instagram", FACEBOOK: "Facebook", EMAIL: "Email", PHONE: "Telèfon", OTHER: "Altres" };
 const STATUS_LABELS = { NEW: "Nou", INFO_SENT: "Informació enviada", FOLLOW_UP: "En seguiment", REPLIED: "Ha contestat", PENDING_DECISION: "Pendent de decisió", BOOKING_CONFIRMED: "Reserva confirmada", CONTACT_LATER: "Contactar més endavant", LOST: "Perdut" };
@@ -67,7 +68,8 @@ function renderContactLinks(lead) {
   const fbUrl = safeExternalUrl(lead.facebookUrl);
   if (fbUrl) links.push(`<a class="lead-contact-button lead-contact-button--facebook" href="${escapeHtml(fbUrl)}" target="_blank" rel="noopener noreferrer">Obrir Facebook</a>`);
   if (lead.email) links.push(`<a class="lead-contact-button" href="mailto:${encodeURIComponent(lead.email)}">Enviar correu</a>`);
-  return links.length ? `<div class="lead-contact-links">${links.join("")}</div>` : "";
+  const contacts = links.length ? `<div class="lead-contact-links">${links.join("")}</div>` : "";
+  return `${contacts}<div class="lead-trip-relationships">${renderTripRelationships(lead)}</div>`;
 }
 
 function renderRows(leads) {
@@ -81,16 +83,19 @@ function renderTimeline(activities, tasks) {
   const items = [...activities.map((item) => ({ ...item, timelineDate: item.createdAt, pending: false })), ...tasks.filter((task) => task.status === "PENDING").map((task) => ({ description: task.title, timelineDate: task.dueAt, pending: true }))].sort((a, b) => (a.timelineDate?.toMillis?.() ?? 0) - (b.timelineDate?.toMillis?.() ?? 0));
   return items.length ? items.map((item) => `<article class="timeline-item ${item.pending ? "is-pending" : ""}"><span class="timeline-item__dot"></span><div><strong>${escapeHtml(item.description || "Activitat")}</strong><small>${formatDate(item.timelineDate, true)}${item.pending ? " · Pendent" : ""}</small></div></article>`).join("") : `<p>Encara no hi ha activitat.</p>`;
 }
-function renderTripOptions(selectedIds = []) { const selected = new Set(selectedIds || []); return tripsCache.map((trip) => `<label class="lead-edit-trip" data-trip-option><input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "checked" : ""}><span>${escapeHtml(trip.name)}</span></label>`).join(""); }
+function renderTripStatusOptions(status) { return Object.entries(STATUS_LABELS).filter(([value]) => value !== "BOOKING_CONFIRMED" || status === value).map(([value, label]) => `<option value="${value}" ${status === value ? "selected" : ""}>${label}</option>`).join(""); }
+function renderTripOptions(lead) { const selected = new Set(lead.tripIds || []); return tripsCache.map((trip) => { const status = getTripInterestStatus(lead, trip.id); return `<label class="lead-edit-trip" data-trip-option><input type="checkbox" name="tripIds" value="${trip.id}" data-trip-label="${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "checked" : ""}><span>${escapeHtml(trip.name)}</span><select data-trip-status="${trip.id}" aria-label="Estat per ${escapeHtml(trip.name)}" ${selected.has(trip.id) ? "" : "disabled"}>${renderTripStatusOptions(status)}</select></label>`; }).join(""); }
 function renderTripSearch() { return `<label class="trip-tag-search"><span class="trip-tag-search__label">Buscar etiqueta</span><span class="trip-tag-search__control"><span aria-hidden="true">⌕</span><input type="search" placeholder="Escriu el nom del viatge..." autocomplete="off" data-trip-tag-search /></span></label><p class="trip-tag-search__empty" data-trip-tag-search-empty hidden>No hi ha cap etiqueta que coincideixi amb la cerca.</p>`; }
 function currentEntryPreset(lead) { if (lead.entryPreset && ENTRY_PRESETS[lead.entryPreset]) return lead.entryPreset; return Object.entries(ENTRY_PRESETS).find(([, preset]) => preset.channel === lead.channel && preset.source === lead.source)?.[0] || "OTHER"; }
 function renderEntryOptions(lead) { const selected = currentEntryPreset(lead); return Object.entries(ENTRY_PRESETS).map(([value, preset]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${preset.label}</option>`).join(""); }
-function renderEditForm(lead) { return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}" placeholder="@usuari o enllaç"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}" placeholder="Enllaç del perfil o conversa"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Etiquetes de viatge</legend>${renderTripSearch()}<div class="trip-tag-options-list">${renderTripOptions(lead.tripIds)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`; }
+function renderEditForm(lead) { return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Viatges i estat comercial</legend><p class="lead-edit-trips__hint">Cada viatge conserva el seu propi estat. Una reserva no tanca els altres interessos.</p>${renderTripSearch()}<div class="trip-tag-options-list">${renderTripOptions(lead)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`; }
+
+function renderTripRelationships(lead) { return (lead.tripIds || []).map((tripId, index) => { const status = getTripInterestStatus(lead, tripId); const dui = lead.tripInterests?.[tripId]?.dui || (lead.bookingTripId === tripId && lead.bookingDui); return `<article><div><strong>${escapeHtml(lead.tripLabels?.[index] || lead.tripInterests?.[tripId]?.tripName || "Viatge")}</strong><span class="lead-status">${STATUS_LABELS[status] || status}</span></div><small>${status === "BOOKING_CONFIRMED" ? `Reserva confirmada${dui ? " · DUI" : ""}` : "Interès actiu"}</small></article>`; }).join("") || "<p>Encara no hi ha cap viatge vinculat.</p>"; }
 function renderExpiredLeadBanner(lead, tasks) { const pendingTask = tasks.find((task) => task.status === "PENDING" && task.type === "NEXT_YEAR_INTEREST"); if (!lead.lostAutomatically || !pendingTask) return ""; return `<section class="lead-action-panel"><div><span class="section-kicker">Viatge finalitzat</span><h2>Vols preguntar-li si vol viatjar l’any vinent?</h2><p>Aquest lead ha passat a perdut perquè el viatge ja ha finalitzat. Pots mantenir el contacte afegint-la a un viatge del proper any.</p></div><div class="lead-edit-actions"><button class="primary-button primary-button--compact" type="button" data-action="next-year">Afegir a interessades proper any</button><button class="secondary-button" type="button" data-action="decline-next-year">No està interessada</button></div></section>`; }
 
 function renderDetail(lead, activities, tasks) {
   const pending = tasks.find((task) => task.status === "PENDING");
-  const terminal = ["LOST", "BOOKING_CONFIRMED"].includes(lead.status);
+  const terminal = lead.status === "LOST" || (lead.status === "BOOKING_CONFIRMED" && !hasActiveTripInterests(lead));
   const nextTitle = terminal ? "Sense acció" : pending?.title || lead.nextActionTitle || "Sense acció";
   const nextDate = terminal ? null : pending?.dueAt || lead.nextActionAt;
   const trip = lead.tripLabels?.join(", ") || lead.interest || "Sense viatge";
@@ -152,7 +157,13 @@ document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-action]"); if (action) runQuickAction(action.dataset.action);
 });
 document.addEventListener("input", (event) => { if (event.target.id === "leadsSearch") filterRows(); if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target); });
-document.addEventListener("change", (event) => { if (event.target.id === "leadsChannelFilter") filterRows(); });
+document.addEventListener("change", (event) => {
+  if (event.target.id === "leadsChannelFilter") filterRows();
+  if (event.target.matches('.lead-edit-form input[name="tripIds"]')) {
+    const status = event.target.closest("[data-trip-option]")?.querySelector("[data-trip-status]");
+    if (status) status.disabled = !event.target.checked;
+  }
+});
 document.addEventListener("submit", async (event) => {
   const formType = event.target.dataset.form; if (!formType) return; event.preventDefault();
   const lead = await getLeadById(currentLeadId); const formData = new FormData(event.target); const data = Object.fromEntries(formData.entries());
@@ -162,7 +173,7 @@ document.addEventListener("submit", async (event) => {
     if (formType === "lost") await markLeadLost({ lead, reason: data.reason, note: data.note });
     if (formType === "next-year") await addExpiredLeadToNextYear({ leadId: currentLeadId, tripId: data.tripId });
     if (formType === "booking") await confirmBooking(lead, { tripId: data.tripId, dui: formData.has("dui") });
-    if (formType === "edit") { const selected = [...event.target.querySelectorAll('input[name="tripIds"]:checked')]; data.tripIds = JSON.stringify(selected.map((input) => input.value)); data.tripLabels = JSON.stringify(selected.map((input) => input.dataset.tripLabel)); await updateLead(currentLeadId, data); const preset = ENTRY_PRESETS[data.entryPreset] || ENTRY_PRESETS.OTHER; await updateLeadEntryChannel(currentLeadId, { ...preset, entryPreset: data.entryPreset || "OTHER", entryLabel: preset.label }); }
+    if (formType === "edit") { const selected = [...event.target.querySelectorAll('input[name="tripIds"]:checked')]; data.tripIds = JSON.stringify(selected.map((input) => input.value)); data.tripLabels = JSON.stringify(selected.map((input) => input.dataset.tripLabel)); data.tripStatuses = JSON.stringify(Object.fromEntries(selected.map((input) => [input.value, event.target.querySelector(`[data-trip-status="${input.value}"]`)?.value || "NEW"]))); await updateLead(currentLeadId, data, lead); const preset = ENTRY_PRESETS[data.entryPreset] || ENTRY_PRESETS.OTHER; await updateLeadEntryChannel(currentLeadId, { ...preset, entryPreset: data.entryPreset || "OTHER", entryLabel: preset.label }); }
     await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : formType === "next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error)); }
 });

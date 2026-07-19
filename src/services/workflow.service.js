@@ -23,6 +23,7 @@ import {
   TASK_STATUSES,
   TASK_TYPES
 } from "../config/app.constants.js";
+import { buildTripInterests, compatibleLeadStatus, hasActiveTripInterests } from "./trip-interest.model.js";
 
 const MAINTENANCE_KEY = "travelflow:dashboard-maintenance";
 const MAINTENANCE_TTL = 5 * 60 * 1000;
@@ -185,7 +186,7 @@ export async function recordManualContact({ lead, description, status = LEAD_STA
   const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.CONTACT, description: description?.trim() || "Contacte comercial registrat.", createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: compatibleLeadStatus(lead, status), lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
 }
 
@@ -195,7 +196,7 @@ export async function scheduleManualFollowUp({ lead, title, dueAt, status = LEAD
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title: title.trim(), type: TASK_TYPES.MANUAL, status: TASK_STATUSES.PENDING, automatic: false, dueAt: dueTimestamp, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NEXT_ACTION_SET, description: `${title.trim()} programat per al ${new Date(dueAt).toLocaleDateString("ca-ES")}.`, createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status, nextActionTitle: title.trim(), nextActionAt: dueTimestamp, updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: compatibleLeadStatus(lead, status), nextActionTitle: title.trim(), nextActionAt: dueTimestamp, updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
 }
 
@@ -206,7 +207,7 @@ export async function markReplied(lead) {
   const batch = writeBatch(db); await cancelPendingAutomaticTasks(lead.id, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.REPLIED, description: "La futura viatgera ha contestat. Seguiment programat automàticament.", createdBy: user.uid, createdAt: serverTimestamp() });
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title, type: TASK_TYPES.SECOND_FOLLOW_UP, status: TASK_STATUSES.PENDING, automatic: true, dueAt, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.REPLIED, nextActionAt: dueAt, nextActionTitle: title, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: compatibleLeadStatus(lead, LEAD_STATUSES.REPLIED), nextActionAt: dueAt, nextActionTitle: title, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
   return { nextActionTitle: title, nextActionAt: dueAt };
 }
@@ -221,7 +222,7 @@ export async function markNoResponse(lead) {
   const title = isFinalReview ? "Revisió final sense resposta" : "Segon seguiment pendent";
   const dueAt = Timestamp.fromDate(addDays(new Date(), days));
   batch.set(doc(collection(db, "tasks")), { leadId: lead.id, leadName: lead.fullName, tripName: lead.tripLabels?.[0] || lead.interest || "", title, type: isFinalReview ? TASK_TYPES.FINAL_REVIEW : TASK_TYPES.SECOND_FOLLOW_UP, status: TASK_STATUSES.PENDING, automatic: true, sequence: noResponseCount + 1, dueAt, createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.FOLLOW_UP, noResponseCount, nextActionTitle: title, nextActionAt: dueAt, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: compatibleLeadStatus(lead, LEAD_STATUSES.FOLLOW_UP), noResponseCount, nextActionTitle: title, nextActionAt: dueAt, lastContactAt: serverTimestamp(), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
   return { noResponseCount, nextActionTitle: title, nextActionAt: dueAt };
 }
@@ -231,9 +232,13 @@ export async function confirmBooking(lead, { tripId, dui = false }) {
   if (!tripId || !lead.tripIds?.includes(tripId)) throw new Error("BOOKING_TRIP_REQUIRED");
   const tripIndex = lead.tripIds.indexOf(tripId);
   const tripName = lead.tripLabels?.[tripIndex] || lead.tripLabels?.[0] || "Viatge";
-  const batch = writeBatch(db); await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
+  const tripInterests = buildTripInterests(lead, lead.tripIds, lead.tripLabels);
+  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.BOOKING_CONFIRMED, bookedAt: serverTimestamp(), dui: Boolean(dui) };
+  const keepsOtherInterests = hasActiveTripInterests({ ...lead, tripInterests });
+  const batch = writeBatch(db);
+  if (!keepsOtherInterests) await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `Reserva confirmada · ${tripName} · DUI: ${dui ? "Sí" : "No"}.`, createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt: serverTimestamp(), nextActionAt: null, nextActionTitle: "", updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt: serverTimestamp(), ...(keepsOtherInterests ? {} : { nextActionAt: null, nextActionTitle: "" }), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
 }
 

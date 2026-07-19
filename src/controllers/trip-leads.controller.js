@@ -1,5 +1,6 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
 import { getTripErrorMessage, getTrips, TRIP_PROCESS_STEPS, updateTripOperations } from "../services/trip.service.js";
+import { getTripInterestStatus } from "../services/trip-interest.model.js";
 
 let currentTrip = null;
 let currentTripLeads = [];
@@ -66,7 +67,7 @@ function renderRows(leads) {
       </span>
       <span class="lead-row__interest">${escapeHtml(lead.tripLabels?.join(", ") || "Sense viatge")}</span>
       <span class="lead-channel lead-channel--${String(lead.channel || "OTHER").toLowerCase()}">${CHANNEL_LABELS[lead.channel] || "Altres"}</span>
-      <span class="lead-status">${STATUS_LABELS[lead.status] || lead.status}</span>
+      <span class="lead-status">${STATUS_LABELS[getTripInterestStatus(lead, currentTrip.id)] || getTripInterestStatus(lead, currentTrip.id)}</span>
       <span class="lead-row__date">${formatDate(lead.nextActionAt)}</span>
       <span>→</span>
     </button>
@@ -79,9 +80,10 @@ function renderProcessChecklist(trip) {
 }
 
 function renderTripDetail(trip, leads, message = "") {
-  const matching = [...leads].sort((a, b) => {
-    if (a.status === "LOST" && b.status !== "LOST") return 1;
-    if (a.status !== "LOST" && b.status === "LOST") return -1;
+  const matching = leads.map((lead) => ({ ...lead, status: getTripInterestStatus(lead, trip.id) })).sort((a, b) => {
+    const aStatus = getTripInterestStatus(a, trip.id); const bStatus = getTripInterestStatus(b, trip.id);
+    if (aStatus === "LOST" && bStatus !== "LOST") return 1;
+    if (aStatus !== "LOST" && bStatus === "LOST") return -1;
     const aDate = a.nextActionAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
     const bDate = b.nextActionAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
     return aDate - bDate;
