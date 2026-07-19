@@ -1,4 +1,4 @@
-import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, updateTripDates } from "../services/trip.service.js";
+import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, TRIP_PROCESS_STEPS, updateTripDates } from "../services/trip.service.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
 import { getConfirmedBookings } from "../services/lead.service.js";
 
@@ -34,18 +34,32 @@ function bookingsForTrip(bookings, tripId) {
   return bookings.filter((booking) => (booking.bookingTripId || booking.tripIds?.[0]) === tripId);
 }
 
+function processSummary(trip) {
+  const checklist = trip.processChecklist || {};
+  const completed = TRIP_PROCESS_STEPS.filter(([key]) => checklist[key] === true);
+  const next = TRIP_PROCESS_STEPS.find(([key]) => checklist[key] !== true);
+  return { last: completed.at(-1)?.[1] || "Encara cap", next: next?.[1] || "Checklist complet" };
+}
+
+function groupStatusLabel(status = "AVAILABLE") {
+  return { AVAILABLE: "Places disponibles", CONFIRMED: "Grup confirmat", FULL: "Grup complet" }[status] || "Places disponibles";
+}
+
 function renderCurrentTripCards(trips, bookings) {
   if (!trips.length) return `<div class="leads-empty"><h2>No hi ha viatges actuals</h2><p>Configura les dates des de l'apartat Etiquetes.</p></div>`;
-  return trips.map((trip) => `
+  return trips.map((trip) => {
+    const process = processSummary(trip);
+    return `
     <article class="trips-hub-card">
-      <div class="trips-hub-card__image" style="--trip-image: url('${escapeHtml(trip.imageUrl || "")}')"><span>${trip.year || "—"}</span></div>
+      <div class="trips-hub-card__image" style="--trip-image: url('${escapeHtml(trip.imageUrl || "")}')"><span>${trip.year || "—"}</span><span class="trip-group-badge trip-group-badge--${String(trip.groupStatus || "AVAILABLE").toLowerCase()}">${groupStatusLabel(trip.groupStatus)}</span></div>
       <div class="trips-hub-card__content">
         <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span><span class="trips-hub-card__leader">Tour Leader: <b>${escapeHtml(trip.tourLeaderName || "Pendent d'assignar")}</b></span></div>
+        <dl class="trips-hub-process"><div><dt>Última acció</dt><dd>${escapeHtml(process.last)}</dd></div><div><dt>Pròxima acció</dt><dd>${escapeHtml(process.next)}</dd></div></dl>
         <section class="trips-hub-card__bookings"><h3>Reserves confirmades</h3>${renderBookingList(bookingsForTrip(bookings, trip.id))}</section>
         <button class="secondary-button" type="button" data-open-trip="${trip.id}">Obrir fitxa del viatge →</button>
       </div>
     </article>
-  `).join("");
+  `; }).join("");
 }
 
 function renderTripsHub(trips, bookings) {

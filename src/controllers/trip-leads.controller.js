@@ -1,21 +1,5 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
-import { getTripErrorMessage, getTrips, updateTripOperations } from "../services/trip.service.js";
-
-const PROCESS_STEPS = [
-  ["published", "Publicat"],
-  ["sentToInterested", "Enviat a interessades"],
-  ["sentToInfoGroup", "Enviat al grup informatiu"],
-  ["minimumTravelersConfirmed", "Mínim de viatgeres confirmades"],
-  ["secondPaymentRequested", "Demanat el segon pagament"],
-  ["travelersGroupCreated", "Grup de viatgeres creat"],
-  ["allSecondPaymentsPaid", "Totes han pagat el segon pagament"],
-  ["flightsPurchased", "Vols comprats"],
-  ["insuranceIssued", "Assegurança feta"],
-  ["contractsSent", "Contractes enviats"],
-  ["finalPaymentConfirmed", "Últim pagament confirmat"],
-  ["travelerInvoicesCreated", "Factures de viatgeres fetes"],
-  ["supplierInvoicesCorrect", "Factures de proveïdors correctes"]
-];
+import { getTripErrorMessage, getTrips, TRIP_PROCESS_STEPS, updateTripOperations } from "../services/trip.service.js";
 
 let currentTrip = null;
 let currentTripLeads = [];
@@ -91,7 +75,7 @@ function renderRows(leads) {
 
 function renderProcessChecklist(trip) {
   const checklist = trip.processChecklist || {};
-  return PROCESS_STEPS.map(([key, label]) => `<label class="trip-process-step ${checklist[key] === true ? "is-complete" : ""}"><input type="checkbox" name="${key}" ${checklist[key] === true ? "checked" : ""}><span><i aria-hidden="true">✓</i>${label}</span></label>`).join("");
+  return TRIP_PROCESS_STEPS.map(([key, label]) => `<label class="trip-process-step ${checklist[key] === true ? "is-complete" : ""}"><input type="checkbox" name="${key}" ${checklist[key] === true ? "checked" : ""}><span><i aria-hidden="true">✓</i>${label}</span></label>`).join("");
 }
 
 function renderTripDetail(trip, leads, message = "") {
@@ -102,14 +86,14 @@ function renderTripDetail(trip, leads, message = "") {
     const bDate = b.nextActionAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
     return aDate - bDate;
   });
-  const completed = PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
+  const completed = TRIP_PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
   return `<section class="trip-detail-page">
     <header class="page-heading"><div><span class="section-kicker">Fitxa operativa del viatge</span><h1>${escapeHtml(trip.name?.replace(/^\d{4}\s*-\s*/, "") || "Viatge")}</h1><p>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)} · ${matching.length} futures viatgeres vinculades.</p></div><button class="secondary-button" type="button" data-back-trips>← Tornar a Viatges</button></header>
     <section class="trip-operations-card">
-      <header><div><span class="section-kicker">Organització</span><h2>Seguiment operatiu</h2></div><strong>${completed} de ${PROCESS_STEPS.length} completats</strong></header>
-      <div class="trip-progress"><span style="width:${Math.round((completed / PROCESS_STEPS.length) * 100)}%"></span></div>
+      <header><div><span class="section-kicker">Organització</span><h2>Seguiment operatiu</h2></div><strong>${completed} de ${TRIP_PROCESS_STEPS.length} completats</strong></header>
+      <div class="trip-progress"><span style="width:${Math.round((completed / TRIP_PROCESS_STEPS.length) * 100)}%"></span></div>
       <form id="tripOperationsForm" data-trip-id="${trip.id}">
-        <label class="form-field trip-tour-leader"><span>Tour Leader · Coordinadora del viatge</span><input name="tourLeaderName" type="text" value="${escapeHtml(trip.tourLeaderName || "")}" placeholder="Nom de la coordinadora"></label>
+        <div class="trip-operations-fields"><label class="form-field trip-tour-leader"><span>Tour Leader · Coordinadora del viatge</span><input name="tourLeaderName" type="text" value="${escapeHtml(trip.tourLeaderName || "")}" placeholder="Nom de la coordinadora"></label><label class="form-field trip-group-status"><span>Estat del grup</span><select name="groupStatus"><option value="AVAILABLE" ${(trip.groupStatus || "AVAILABLE") === "AVAILABLE" ? "selected" : ""}>Places disponibles</option><option value="CONFIRMED" ${trip.groupStatus === "CONFIRMED" ? "selected" : ""}>Grup confirmat</option><option value="FULL" ${trip.groupStatus === "FULL" ? "selected" : ""}>Grup complet</option></select></label></div>
         <fieldset class="trip-process-list"><legend>Checklist del viatge</legend>${renderProcessChecklist(trip)}</fieldset>
         <div class="trip-operations-actions"><p class="quick-lead-form__message ${message ? "is-success" : ""}" id="tripOperationsMessage">${escapeHtml(message)}</p><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></div>
       </form>
@@ -154,7 +138,8 @@ document.addEventListener("submit", async (event) => {
   try {
     const updated = await updateTripOperations(form.dataset.tripId, {
       tourLeaderName: data.get("tourLeaderName") || "",
-      processChecklist: Object.fromEntries(PROCESS_STEPS.map(([key]) => [key, data.has(key)]))
+      groupStatus: data.get("groupStatus") || "AVAILABLE",
+      processChecklist: Object.fromEntries(TRIP_PROCESS_STEPS.map(([key]) => [key, data.has(key)]))
     });
     currentTrip = { ...currentTrip, ...updated };
     root().innerHTML = renderTripDetail(currentTrip, currentTripLeads, "Canvis guardats correctament.");

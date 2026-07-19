@@ -20,7 +20,15 @@ const SEED_SESSION_KEY = "travelflow:trip-catalogue-checked";
 let tripsCache = null;
 let tripsCacheAt = 0;
 let tripsRequest = null;
-const TRIP_PROCESS_KEYS = ["published", "sentToInterested", "sentToInfoGroup", "minimumTravelersConfirmed", "secondPaymentRequested", "travelersGroupCreated", "allSecondPaymentsPaid", "flightsPurchased", "insuranceIssued", "contractsSent", "finalPaymentConfirmed", "travelerInvoicesCreated", "supplierInvoicesCorrect"];
+export const TRIP_PROCESS_STEPS = [
+  ["published", "Publicat"], ["sentToInterested", "Enviat a interessades"], ["sentToInfoGroup", "Enviat al grup informatiu"],
+  ["minimumTravelersConfirmed", "Mínim de viatgeres confirmades"], ["secondPaymentRequested", "Demanat el segon pagament"],
+  ["travelersGroupCreated", "Grup de viatgeres creat"], ["allSecondPaymentsPaid", "Totes han pagat el segon pagament"],
+  ["flightsPurchased", "Vols comprats"], ["insuranceIssued", "Assegurança feta"], ["contractsSent", "Contractes enviats"],
+  ["finalPaymentConfirmed", "Últim pagament confirmat"], ["travelerInvoicesCreated", "Factures de viatgeres fetes"],
+  ["supplierInvoicesCorrect", "Factures de proveïdors correctes"]
+];
+const TRIP_GROUP_STATUSES = ["AVAILABLE", "CONFIRMED", "FULL"];
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function slugify(value = "") {
@@ -150,23 +158,25 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
   return { activated };
 }
 
-export async function updateTripOperations(tripId, { tourLeaderName = "", processChecklist = {} }) {
+export async function updateTripOperations(tripId, { tourLeaderName = "", groupStatus = "AVAILABLE", processChecklist = {} }) {
   const currentUser = getCurrentUser();
   if (!currentUser) throw new Error("AUTH_REQUIRED");
   if (!tripId) throw new Error("TRIP_REQUIRED");
-  const checklist = Object.fromEntries(TRIP_PROCESS_KEYS.map((key) => [key, processChecklist[key] === true]));
+  if (!TRIP_GROUP_STATUSES.includes(groupStatus)) throw new Error("TRIP_GROUP_STATUS_INVALID");
+  const checklist = Object.fromEntries(TRIP_PROCESS_STEPS.map(([key]) => [key, processChecklist[key] === true]));
   const update = {
     tourLeaderName: tourLeaderName.trim(),
+    groupStatus,
     processChecklist: checklist,
     updatedBy: currentUser.uid,
     updatedAt: serverTimestamp()
   };
   await updateDoc(doc(db, "trips", tripId), update);
   if (tripsCache) {
-    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, tourLeaderName: update.tourLeaderName, processChecklist: checklist } : trip);
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, tourLeaderName: update.tourLeaderName, groupStatus, processChecklist: checklist } : trip);
     tripsCacheAt = Date.now();
   }
-  return { tourLeaderName: update.tourLeaderName, processChecklist: checklist };
+  return { tourLeaderName: update.tourLeaderName, groupStatus, processChecklist: checklist };
 }
 
 export function getTripErrorMessage(error) {
@@ -180,6 +190,7 @@ export function getTripErrorMessage(error) {
     TRIP_DATE_ORDER: "La data de finalització no pot ser anterior a la d'inici.",
     TRIP_CLOSING_ORDER: "La data de tancament no pot ser posterior a la sortida.",
     TRIP_REQUIRED: "No s'ha pogut identificar el viatge.",
+    TRIP_GROUP_STATUS_INVALID: "Selecciona un estat de grup vàlid.",
     "permission-denied": "No tens permís per gestionar aquestes etiquetes de viatge."
   };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació amb el viatge.";
