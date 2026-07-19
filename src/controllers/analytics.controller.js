@@ -353,6 +353,29 @@ function periodKey(date, mode) {
   return localIso(first);
 }
 
+function periodStart(date, mode) {
+  const value = startOfDay(date);
+  if (mode === "month") return new Date(value.getFullYear(), value.getMonth(), 1);
+  if (mode === "week") {
+    const day = value.getDay() || 7;
+    value.setDate(value.getDate() - day + 1);
+  }
+  return value;
+}
+
+function addPeriod(date, mode, amount = 1) {
+  const value = new Date(date);
+  if (mode === "month") value.setMonth(value.getMonth() + amount);
+  else value.setDate(value.getDate() + amount * (mode === "week" ? 7 : 1));
+  return value;
+}
+
+function periodLabel(date, mode) {
+  if (mode === "month") return new Intl.DateTimeFormat("ca-ES", { month: "short", year: "2-digit" }).format(date);
+  if (mode === "week") return `Set. ${new Intl.DateTimeFormat("ca-ES", { day: "numeric", month: "short" }).format(date)}`;
+  return new Intl.DateTimeFormat("ca-ES", { day: "numeric", month: "short" }).format(date);
+}
+
 function renderEvolution() {
   const { start, end } = getDateBounds();
   const duration = Math.max(1, Math.round((end - start) / 86400000));
@@ -364,17 +387,27 @@ function renderEvolution() {
     if (!grouped.has(key)) grouped.set(key, { key, leads: 0, bookings: 0 });
     return grouped.get(key);
   };
+  const lastPeriod = periodStart(end, mode);
+  const firstVisiblePeriod = addPeriod(lastPeriod, mode, -13);
+  const firstPeriod = periodStart(start, mode) > firstVisiblePeriod ? periodStart(start, mode) : firstVisiblePeriod;
+  for (let date = firstPeriod; date <= lastPeriod; date = addPeriod(date, mode)) {
+    grouped.set(periodKey(date, mode), { key: periodKey(date, mode), date: new Date(date), leads: 0, bookings: 0 });
+  }
   analyticsState.leads.forEach((lead) => {
     if (!matchesDimensionFilters(lead)) return;
     const createdAt = toDate(lead.createdAt);
-    if (inRange(createdAt)) rowFor(createdAt).leads += 1;
+    if (inRange(createdAt) && grouped.has(periodKey(createdAt, mode))) rowFor(createdAt).leads += 1;
     if (lead.status !== "BOOKING_CONFIRMED" || !matchesDimensionFilters(lead, { bookingTripOnly: true })) return;
     const bookedAt = toDate(lead.bookedAt) || createdAt;
-    if (inRange(bookedAt)) rowFor(bookedAt).bookings += 1;
+    if (inRange(bookedAt) && grouped.has(periodKey(bookedAt, mode))) rowFor(bookedAt).bookings += 1;
   });
-  const rows = [...grouped.values()].sort((a, b) => a.key.localeCompare(b.key)).slice(-14);
-  const max = Math.max(...rows.map((row) => row.leads), 1);
-  return `<article class="analytics-card analytics-evolution"><header><div><span class="section-kicker">Tendència</span><h2>Evolució de leads i reserves</h2></div><span>Per ${mode === "day" ? "dia" : mode === "week" ? "setmana" : "mes"}</span></header><div class="analytics-evolution-chart">${rows.length ? rows.map((row) => `<div class="analytics-evolution-column"><div class="analytics-evolution-bars"><span class="is-leads" style="height:${Math.max((row.leads / max) * 100, 5)}%" title="${row.leads} leads"></span><span class="is-bookings" style="height:${Math.max((row.bookings / max) * 100, row.bookings ? 5 : 0)}%" title="${row.bookings} reserves"></span></div><small>${row.key}</small></div>`).join("") : '<p class="analytics-empty">No hi ha activitat en aquest període.</p>'}</div><div class="analytics-legend"><span><i class="is-leads"></i>Leads</span><span><i class="is-bookings"></i>Reserves</span></div></article>`;
+  const rows = [...grouped.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const max = Math.max(...rows.flatMap((row) => [row.leads, row.bookings]), 1);
+  const totalLeads = rows.reduce((sum, row) => sum + row.leads, 0);
+  const totalBookings = rows.reduce((sum, row) => sum + row.bookings, 0);
+  const peak = [...rows].sort((a, b) => (b.leads + b.bookings) - (a.leads + a.bookings))[0];
+  const hasActivity = totalLeads + totalBookings > 0;
+  return `<article class="analytics-card analytics-evolution"><header><div><span class="section-kicker">Tendència · últims ${rows.length} períodes</span><h2>Evolució de leads i reserves</h2></div><div class="analytics-evolution-totals"><span><i class="is-leads"></i><strong>${totalLeads}</strong> leads</span><span><i class="is-bookings"></i><strong>${totalBookings}</strong> reserves</span></div></header>${hasActivity ? `<div class="analytics-evolution-chart">${rows.map((row) => `<div class="analytics-evolution-column" title="${periodLabel(row.date, mode)} · ${row.leads} leads · ${row.bookings} reserves"><div class="analytics-evolution-bars"><span class="is-leads ${row.leads ? "" : "is-zero"}" style="height:${row.leads ? Math.max((row.leads / max) * 100, 7) : 2}%"><b>${row.leads || ""}</b></span><span class="is-bookings ${row.bookings ? "" : "is-zero"}" style="height:${row.bookings ? Math.max((row.bookings / max) * 100, 7) : 2}%"><b>${row.bookings || ""}</b></span></div><small>${periodLabel(row.date, mode)}</small></div>`).join("")}</div><footer class="analytics-evolution-footer"><span>Pic d’activitat: <strong>${periodLabel(peak.date, mode)}</strong></span><span>Conversió del gràfic: <strong>${formatPercent(percentage(totalBookings, totalLeads))}</strong></span></footer>` : `<div class="analytics-evolution-empty"><strong>Sense activitat en aquests períodes</strong><span>Prova d’ampliar el rang o de restablir els filtres.</span></div>`}</article>`;
 }
 
 function renderRadar(rows) {
