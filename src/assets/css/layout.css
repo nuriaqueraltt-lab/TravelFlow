@@ -26,6 +26,11 @@
   padding: 0 var(--space-2) var(--space-8);
 }
 
+.sidebar__brand .login-brand-logo {
+  width: 68px;
+  flex: 0 0 auto;
+}
+
 .sidebar__brand strong,
 .sidebar__brand span {
   display: block;

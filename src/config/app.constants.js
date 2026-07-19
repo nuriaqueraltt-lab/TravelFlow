@@ -1,3 +1,5 @@
+export const BRAND_LOGO_URL = "https://donesiviatgeres.com/wp-content/uploads/2024/10/cropped-Logo-Ventura-Tours.png";
+
 export const USER_ROLES = Object.freeze({
   ADMIN: "ADMIN",
   MANAGER: "MANAGER",

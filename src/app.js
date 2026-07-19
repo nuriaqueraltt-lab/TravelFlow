@@ -1,3 +1,5 @@
+import { BRAND_LOGO_URL } from "./config/app.constants.js";
+
 function renderBrandMark() {
   return `
     <div class="brand-mark" aria-hidden="true">
@@ -109,7 +111,7 @@ function renderAppShell() {
   return `
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar__brand">${renderBrandMark()}<div><strong>TravelFlow</strong><span>Dones i Viatgeres</span></div></div>
+        <div class="sidebar__brand"><img class="login-brand-logo" src="${BRAND_LOGO_URL}" alt="Dones i Viatgeres" /><div class="login-brand-copy"><strong>TravelFlow</strong><span>CRM intern · Dones i Viatgeres</span></div></div>
         <nav class="sidebar-nav" aria-label="Navegació principal">
           <span class="sidebar-nav__label">Espai de treball</span>
           ${renderSidebarItem({ icon: "dashboard", label: "Dashboard", active: true })}
