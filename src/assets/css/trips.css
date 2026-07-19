@@ -20,6 +20,14 @@
 .trips-hub-card__content strong { color: var(--color-text-primary); font-size: 1.05rem; line-height: 1.35; }
 .trips-hub-card__content span { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 .trips-hub-card__content button { width: 100%; }
+.trips-hub-card__bookings { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.trips-hub-card__bookings h3 { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-xs); letter-spacing: .05em; text-transform: uppercase; }
+.trips-hub-card__empty { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.trips-hub-bookings { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.trips-hub-bookings li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.trips-hub-bookings button { width: auto; padding: 0; border: 0; background: transparent; color: var(--color-text-primary); font-weight: 700; text-align: left; }
+.trips-hub-bookings span { flex: 0 0 auto; padding: 4px 8px; border-radius: var(--radius-pill); background: var(--color-surface-soft); font-size: 11px; font-weight: 800; }
+.trips-hub-bookings span.is-dui { background: var(--color-brand-050); color: var(--color-brand-900); }
 
 .trips-management-summary {
   display: grid;

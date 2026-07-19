@@ -1,5 +1,6 @@
 import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, updateTripDates } from "../services/trip.service.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
+import { getConfirmedBookings } from "../services/lead.service.js";
 
 let tripsCache = [];
 
@@ -24,26 +25,36 @@ function currentTrips(trips) {
     .sort((a, b) => String(a.startDate || "9999-12-31").localeCompare(String(b.startDate || "9999-12-31")));
 }
 
-function renderCurrentTripCards(trips) {
+function renderBookingList(bookings) {
+  if (!bookings.length) return `<p class="trips-hub-card__empty">Encara no hi ha reserves confirmades.</p>`;
+  return `<ul class="trips-hub-bookings">${bookings.map((booking) => `<li><button type="button" data-lead-id="${booking.id}">${escapeHtml(booking.fullName)}</button><span class="${booking.bookingDui === true ? "is-dui" : ""}">${typeof booking.bookingDui === "boolean" ? `DUI: ${booking.bookingDui ? "Sí" : "No"}` : "DUI pendent"}</span></li>`).join("")}</ul>`;
+}
+
+function bookingsForTrip(bookings, tripId) {
+  return bookings.filter((booking) => (booking.bookingTripId || booking.tripIds?.[0]) === tripId);
+}
+
+function renderCurrentTripCards(trips, bookings) {
   if (!trips.length) return `<div class="leads-empty"><h2>No hi ha viatges actuals</h2><p>Configura les dates des de l'apartat Etiquetes.</p></div>`;
   return trips.map((trip) => `
     <article class="trips-hub-card">
       <div class="trips-hub-card__image" style="--trip-image: url('${escapeHtml(trip.imageUrl || "")}')"><span>${trip.year || "—"}</span></div>
       <div class="trips-hub-card__content">
         <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span></div>
+        <section class="trips-hub-card__bookings"><h3>Reserves confirmades</h3>${renderBookingList(bookingsForTrip(bookings, trip.id))}</section>
         <button class="secondary-button" type="button" data-open-trip="${trip.id}">Veure interessades →</button>
       </div>
     </article>
   `).join("");
 }
 
-function renderTripsHub(trips) {
+function renderTripsHub(trips, bookings) {
   const activeTrips = currentTrips(trips);
   return `<section class="trips-hub-page">
     <header class="page-heading"><div><span class="section-kicker">Gestió de viatges</span><h1>Viatges actuals</h1><p>Consulta els viatges programats i les futures viatgeres vinculades.</p></div><button class="secondary-button" type="button" data-open-trip-tags>Gestionar etiquetes</button></header>
     <nav class="trips-section-tabs" aria-label="Apartats de viatges"><button class="is-active" type="button">Viatges actuals</button><button type="button" data-open-trip-tags>Etiquetes de viatge</button></nav>
     <section class="trips-hub-summary"><div><strong>${activeTrips.length}</strong><span>Viatges actuals</span></div><div><strong>${trips.filter((trip) => !trip.startDate || !trip.endDate).length}</strong><span>Pendents de dates</span></div></section>
-    <section class="trips-hub-grid">${renderCurrentTripCards(activeTrips)}</section>
+    <section class="trips-hub-grid">${renderCurrentTripCards(activeTrips, bookings)}</section>
   </section>`;
 }
 
@@ -69,7 +80,7 @@ function filterTrips() {
 
 function setTripsActive() { document.querySelectorAll(".sidebar-nav__item").forEach((button) => button.classList.toggle("is-active", button.textContent.trim().startsWith("Viatges"))); }
 async function loadTrips() { await seedInitialTrips(); tripsCache = await getTrips(); return tripsCache; }
-async function showTripsHub() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-hub-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { root.innerHTML = renderTripsHub(await loadTrips()); } catch (error) { root.innerHTML = `<section class="trips-hub-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
+async function showTripsHub() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-hub-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { const [trips, bookings] = await Promise.all([loadTrips(), getConfirmedBookings()]); root.innerHTML = renderTripsHub(trips, bookings); } catch (error) { root.innerHTML = `<section class="trips-hub-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 async function showTripTags() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant etiquetes...</p></div></section>'; try { root.innerHTML = renderTripsView(await loadTrips()); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 
 document.addEventListener("click", (event) => {

@@ -8,6 +8,9 @@ let leadsCache = null;
 let leadsCacheAt = 0;
 let leadsRequest = null;
 const tripLeadsCache = new Map();
+let confirmedBookingsCache = null;
+let confirmedBookingsCacheAt = 0;
+let confirmedBookingsRequest = null;
 
 function normalizePhone(phone = "") { return String(phone).replace(/\D/g, ""); }
 function normalizeEmail(email = "") { return String(email).trim().toLowerCase(); }
@@ -21,7 +24,21 @@ function addDaysFrom(baseDate, days) { const date = new Date(baseDate); date.set
 function sortLeads(items) { return [...items].sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)); }
 function setLeadsCache(items) { leadsCache = sortLeads(items.filter((lead) => lead.active !== false)); leadsCacheAt = Date.now(); return leadsCache; }
 function upsertLeadCache(lead) { if (!leadsCache) return; const index = leadsCache.findIndex((item) => item.id === lead.id); if (index >= 0) leadsCache[index] = { ...leadsCache[index], ...lead }; else leadsCache.unshift(lead); leadsCache = sortLeads(leadsCache.filter((item) => item.active !== false)); leadsCacheAt = Date.now(); }
-export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); }
+export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null; }
+
+export async function getConfirmedBookings({ force = false } = {}) {
+  if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache.filter((lead) => lead.status === "BOOKING_CONFIRMED");
+  if (!force && confirmedBookingsCache && Date.now() - confirmedBookingsCacheAt < LEADS_CACHE_TTL) return confirmedBookingsCache;
+  if (!force && confirmedBookingsRequest) return confirmedBookingsRequest;
+  confirmedBookingsRequest = getDocs(query(collection(db, "leads"), where("status", "==", "BOOKING_CONFIRMED")))
+    .then((snapshot) => {
+      confirmedBookingsCache = snapshot.docs.map(mapDocument).filter((lead) => lead.active !== false);
+      confirmedBookingsCacheAt = Date.now();
+      return confirmedBookingsCache;
+    })
+    .finally(() => { confirmedBookingsRequest = null; });
+  return confirmedBookingsRequest;
+}
 
 export async function getLeadsByTrip(tripId, { force = false } = {}) {
   if (!tripId) return [];
@@ -92,6 +109,7 @@ export async function updateLead(leadId, input) {
   const update = { firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone, phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email), instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "", notes: input.notes?.trim() ?? "", tripIds, tripLabels, interest: tripLabels.join(", "), updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
   await updateDoc(doc(db, "leads", leadId), update); upsertLeadCache({ id: leadId, ...update });
   tripLeadsCache.clear();
+  confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null;
   const taskSnapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId), where("status", "==", TASK_STATUSES.PENDING)));
   const batch = writeBatch(db);
   batch.set(doc(collection(db, "activities")), { leadId, type: ACTIVITY_TYPES.NOTE, description: "Dades i etiquetes de la futura viatgera actualitzades.", createdBy: currentUser.uid, createdAt: serverTimestamp() });

@@ -226,11 +226,14 @@ export async function markNoResponse(lead) {
   return { noResponseCount, nextActionTitle: title, nextActionAt: dueAt };
 }
 
-export async function confirmBooking(lead) {
+export async function confirmBooking(lead, { tripId, dui = false }) {
   const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
+  if (!tripId || !lead.tripIds?.includes(tripId)) throw new Error("BOOKING_TRIP_REQUIRED");
+  const tripIndex = lead.tripIds.indexOf(tripId);
+  const tripName = lead.tripLabels?.[tripIndex] || lead.tripLabels?.[0] || "Viatge";
   const batch = writeBatch(db); await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
-  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.BOOKING_CONFIRMED, description: "Reserva confirmada.", createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, nextActionAt: null, nextActionTitle: "", updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `Reserva confirmada · ${tripName} · DUI: ${dui ? "Sí" : "No"}.`, createdBy: user.uid, createdAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt: serverTimestamp(), nextActionAt: null, nextActionTitle: "", updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
 }
 
@@ -264,6 +267,6 @@ export async function completeTask(taskId) {
 }
 
 export function getWorkflowErrorMessage(error) {
-  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
+  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", BOOKING_TRIP_REQUIRED: "Selecciona el viatge de la reserva.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'acció.";
 }

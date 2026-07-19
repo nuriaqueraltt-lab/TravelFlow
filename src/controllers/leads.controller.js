@@ -105,6 +105,10 @@ function renderActionForm(action, lead = null, pending = null) {
     return `<form class="lead-inline-form" data-form="next-action"><label>Títol de l'acció<input name="title" required value="${escapeHtml(title)}" placeholder="Ex. Trucar clienta" /></label><label>Data<input name="dueAt" type="date" required value="${dateInputValue(dueAt)}" /></label><div class="lead-edit-actions"><button class="primary-button primary-button--compact" type="submit">Guardar</button><button class="secondary-button" type="button" data-cancel-next-action>Cancel·lar</button>${title || dueAt ? '<button class="secondary-button is-danger" type="button" data-remove-next-action>Eliminar pròxima acció</button>' : ""}</div></form>`;
   }
   if (action === "lost") return `<form class="lead-inline-form" data-form="lost"><label>Motiu obligatori<select name="reason" required><option value="">Selecciona...</option>${Object.entries(LOST_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label>Observacions<textarea name="note"></textarea></label><button class="primary-button primary-button--compact">Confirmar pèrdua</button></form>`;
+  if (action === "booking") {
+    const options = (lead?.tripIds || []).map((tripId, index) => `<option value="${tripId}" ${lead.bookingTripId === tripId ? "selected" : ""}>${escapeHtml(lead.tripLabels?.[index] || "Viatge")}</option>`).join("");
+    return `<form class="lead-inline-form" data-form="booking"><label>Viatge de la reserva<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label><label class="checkbox-field"><input type="checkbox" name="dui" ${lead.bookingDui === true ? "checked" : ""}><span>DUI · Habitació doble d'ús individual</span></label><button class="primary-button primary-button--compact">Guardar reserva</button></form>`;
+  }
   if (action === "next-year") { const nextYear = new Date().getFullYear() + 1; const options = tripsCache.filter((trip) => Number(trip.year) >= nextYear).map((trip) => `<option value="${trip.id}">${escapeHtml(trip.name)}</option>`).join(""); return `<form class="lead-inline-form" data-form="next-year"><label>Viatge del proper any<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label><div></div><button class="primary-button primary-button--compact">Afegir a la llista</button></form>`; }
   return "";
 }
@@ -116,7 +120,7 @@ function filterRows() { const search = normalizeText(document.querySelector("#le
 function filterEditTripOptions(searchInput) { const fieldset = searchInput.closest(".lead-edit-trips"); if (!fieldset) return; const query = normalizeText(searchInput.value); const options = [...fieldset.querySelectorAll("[data-trip-option]")]; let visible = 0; options.forEach((option) => { const matches = !query || normalizeText(option.textContent).includes(query); option.hidden = !matches; if (matches) visible += 1; }); const empty = fieldset.querySelector("[data-trip-tag-search-empty]"); if (empty) empty.hidden = visible > 0; }
 async function runQuickAction(action) {
   const lead = await getLeadById(currentLeadId);
-  if (["contact", "schedule", "lost", "next-year", "edit-next-action"].includes(action)) {
+  if (["contact", "schedule", "lost", "next-year", "edit-next-action", "booking"].includes(action)) {
     const tasks = action === "edit-next-action" ? await getLeadTasks(currentLeadId) : [];
     const pending = tasks.find((task) => task.status === "PENDING") || null;
     document.querySelector("#leadActionPanel").innerHTML = renderActionForm(action, lead, pending);
@@ -125,7 +129,6 @@ async function runQuickAction(action) {
   try {
     if (action === "replied") await markReplied(lead);
     if (action === "no-response") await markNoResponse(lead);
-    if (action === "booking" && window.confirm("Confirmes que la reserva està confirmada?")) await confirmBooking(lead);
     if (action === "decline-next-year" && window.confirm("Confirmes que no vol entrar al llistat del proper any?")) await declineExpiredLeadNextYear(lead.id);
     await refreshDetail();
     window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
@@ -158,6 +161,7 @@ document.addEventListener("submit", async (event) => {
     if (formType === "next-action") await saveManualNextAction({ lead, title: data.title, dueAt: data.dueAt });
     if (formType === "lost") await markLeadLost({ lead, reason: data.reason, note: data.note });
     if (formType === "next-year") await addExpiredLeadToNextYear({ leadId: currentLeadId, tripId: data.tripId });
+    if (formType === "booking") await confirmBooking(lead, { tripId: data.tripId, dui: formData.has("dui") });
     if (formType === "edit") { const selected = [...event.target.querySelectorAll('input[name="tripIds"]:checked')]; data.tripIds = JSON.stringify(selected.map((input) => input.value)); data.tripLabels = JSON.stringify(selected.map((input) => input.dataset.tripLabel)); await updateLead(currentLeadId, data); const preset = ENTRY_PRESETS[data.entryPreset] || ENTRY_PRESETS.OTHER; await updateLeadEntryChannel(currentLeadId, { ...preset, entryPreset: data.entryPreset || "OTHER", entryLabel: preset.label }); }
     await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : formType === "next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error)); }
