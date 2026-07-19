@@ -1,4 +1,5 @@
 import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, updateTripDates } from "../services/trip.service.js";
+import { showLeadsForTrip } from "./trip-leads.controller.js";
 
 let tripsCache = [];
 
@@ -13,7 +14,37 @@ function renderTripRows(trips) {
 }
 
 function renderTripsView(trips) {
-  return `<section class="trips-management-page"><header class="page-heading"><div><span class="section-kicker">Configuració comercial</span><h1>Etiquetes de viatge</h1><p>Crea i gestiona els viatges que es poden assignar als leads.</p></div><button class="primary-button primary-button--compact" type="button" data-create-trip>+ Nou viatge</button></header><section class="trips-management-summary"><div><strong>${trips.length}</strong><span>Etiquetes totals</span></div><div><strong>${trips.filter((trip) => !trip.startDate || !trip.endDate).length}</strong><span>Amb dates pendents</span></div></section><section class="trips-management-search"><label><span>Buscar viatge</span><input id="tripsSearch" type="search" placeholder="Nom o any del viatge..." autocomplete="off" /></label><div><strong id="tripsVisibleCount">${trips.length}</strong><span> visibles</span></div></section><section class="trips-management-card"><div class="trips-management-head"><span>Viatge</span><span>Dates i tancament</span><span></span></div><div id="tripRows">${renderTripRows(trips)}</div></section></section>`;
+  return `<section class="trips-management-page"><header class="page-heading"><div><span class="section-kicker">Configuració comercial</span><h1>Etiquetes de viatge</h1><p>Crea i gestiona els viatges que es poden assignar als leads.</p></div><button class="primary-button primary-button--compact" type="button" data-create-trip>+ Nou viatge</button></header><nav class="trips-section-tabs" aria-label="Apartats de viatges"><button type="button" data-open-trips-hub>Viatges actuals</button><button class="is-active" type="button">Etiquetes de viatge</button></nav><section class="trips-management-summary"><div><strong>${trips.length}</strong><span>Etiquetes totals</span></div><div><strong>${trips.filter((trip) => !trip.startDate || !trip.endDate).length}</strong><span>Amb dates pendents</span></div></section><section class="trips-management-search"><label><span>Buscar viatge</span><input id="tripsSearch" type="search" placeholder="Nom o any del viatge..." autocomplete="off" /></label><div><strong id="tripsVisibleCount">${trips.length}</strong><span> visibles</span></div></section><section class="trips-management-card"><div class="trips-management-head"><span>Viatge</span><span>Dates i tancament</span><span></span></div><div id="tripRows">${renderTripRows(trips)}</div></section></section>`;
+}
+
+function currentTrips(trips) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return trips
+    .filter((trip) => trip.endDate && trip.endDate >= today)
+    .sort((a, b) => String(a.startDate || "9999-12-31").localeCompare(String(b.startDate || "9999-12-31")));
+}
+
+function renderCurrentTripCards(trips) {
+  if (!trips.length) return `<div class="leads-empty"><h2>No hi ha viatges actuals</h2><p>Configura les dates des de l'apartat Etiquetes.</p></div>`;
+  return trips.map((trip) => `
+    <article class="trips-hub-card">
+      <div class="trips-hub-card__image" style="--trip-image: url('${escapeHtml(trip.imageUrl || "")}')"><span>${trip.year || "—"}</span></div>
+      <div class="trips-hub-card__content">
+        <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span></div>
+        <button class="secondary-button" type="button" data-open-trip="${trip.id}">Veure interessades →</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderTripsHub(trips) {
+  const activeTrips = currentTrips(trips);
+  return `<section class="trips-hub-page">
+    <header class="page-heading"><div><span class="section-kicker">Gestió de viatges</span><h1>Viatges actuals</h1><p>Consulta els viatges programats i les futures viatgeres vinculades.</p></div><button class="secondary-button" type="button" data-open-trip-tags>Gestionar etiquetes</button></header>
+    <nav class="trips-section-tabs" aria-label="Apartats de viatges"><button class="is-active" type="button">Viatges actuals</button><button type="button" data-open-trip-tags>Etiquetes de viatge</button></nav>
+    <section class="trips-hub-summary"><div><strong>${activeTrips.length}</strong><span>Viatges actuals</span></div><div><strong>${trips.filter((trip) => !trip.startDate || !trip.endDate).length}</strong><span>Pendents de dates</span></div></section>
+    <section class="trips-hub-grid">${renderCurrentTripCards(activeTrips)}</section>
+  </section>`;
 }
 
 function renderTripForm({ mode, row = null }) {
@@ -37,16 +68,23 @@ function filterTrips() {
 }
 
 function setTripsActive() { document.querySelectorAll(".sidebar-nav__item").forEach((button) => button.classList.toggle("is-active", button.textContent.trim().startsWith("Viatges"))); }
-async function showTripsView() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { await seedInitialTrips(); tripsCache = await getTrips(); root.innerHTML = renderTripsView(tripsCache); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
-function enableTripsButton() { const button = [...document.querySelectorAll(".sidebar-nav__item")].find((item) => item.textContent.trim().startsWith("Viatges")); if (!button) return; button.disabled = false; button.querySelector("small")?.remove(); }
-const observer = new MutationObserver(enableTripsButton); observer.observe(document.body, { childList: true, subtree: true }); enableTripsButton();
+async function loadTrips() { await seedInitialTrips(); tripsCache = await getTrips(); return tripsCache; }
+async function showTripsHub() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-hub-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { root.innerHTML = renderTripsHub(await loadTrips()); } catch (error) { root.innerHTML = `<section class="trips-hub-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
+async function showTripTags() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant etiquetes...</p></div></section>'; try { root.innerHTML = renderTripsView(await loadTrips()); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 
 document.addEventListener("click", (event) => {
   const navButton = event.target.closest(".sidebar-nav__item");
   const createButton = event.target.closest("[data-create-trip]");
   const editButton = event.target.closest("[data-edit-trip]");
   const closeButton = event.target.closest("[data-close-trip-modal]");
-  if (navButton?.textContent.trim().startsWith("Viatges")) { setTripsActive(); showTripsView(); return; }
+  const tagsButton = event.target.closest("[data-open-trip-tags]");
+  const hubButton = event.target.closest("[data-open-trips-hub]");
+  const tripButton = event.target.closest("[data-open-trip]");
+  const backButton = event.target.closest("[data-back-trips]");
+  if (navButton?.textContent.trim().startsWith("Viatges") || backButton) { setTripsActive(); showTripsHub(); return; }
+  if (hubButton) { setTripsActive(); showTripsHub(); return; }
+  if (tagsButton) { setTripsActive(); showTripTags(); return; }
+  if (tripButton) { setTripsActive(); showLeadsForTrip(tripButton.dataset.openTrip); return; }
   if (createButton) { document.body.insertAdjacentHTML("beforeend", renderTripForm({ mode: "create" })); return; }
   if (editButton) { document.body.insertAdjacentHTML("beforeend", renderTripForm({ mode: "edit", row: editButton.closest("[data-trip-id]") })); return; }
   if (closeButton) document.querySelector("#tripDateModal")?.remove();
@@ -66,7 +104,7 @@ document.addEventListener("submit", async (event) => {
     if (form.id === "tripCreateForm") await createTripTag(data);
     else await updateTripDates(form.dataset.tripId, data);
     document.querySelector("#tripDateModal")?.remove();
-    await showTripsView();
+    await showTripTags();
     window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   } catch (error) {
     message.classList.add("is-error");

@@ -1,4 +1,4 @@
-import { getLeads } from "../services/lead.service.js";
+import { getLeadsByTrip } from "../services/lead.service.js";
 import { getTrips } from "../services/trip.service.js";
 
 const CHANNEL_LABELS = {
@@ -77,11 +77,9 @@ export async function showLeadsForTrip(tripId) {
   container.innerHTML = `<section class="leads-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant els leads del viatge...</p></div></section>`;
 
   try {
-    const [leads, trips] = await Promise.all([getLeads(), getTrips()]);
+    const [leads, trips] = await Promise.all([getLeadsByTrip(tripId), getTrips()]);
     const trip = trips.find((item) => item.id === tripId);
-    const matching = leads
-      .filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(tripId))
-      .sort((a, b) => {
+    const matching = leads.sort((a, b) => {
         if (a.status === "LOST" && b.status !== "LOST") return 1;
         if (a.status !== "LOST" && b.status === "LOST") return -1;
         const aDate = a.nextActionAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
@@ -97,7 +95,7 @@ export async function showLeadsForTrip(tripId) {
             <h1>${escapeHtml(trip?.name?.replace(/^\d{4}\s*-\s*/, "") || "Viatge")}</h1>
             <p>${matching.length} futures viatgeres vinculades · ${matching.filter((lead) => lead.status !== "LOST").length} actives.</p>
           </div>
-          <button class="secondary-button" type="button" data-back-dashboard>← Tornar al Dashboard</button>
+          <button class="secondary-button" type="button" data-back-trips>← Tornar a Viatges</button>
         </header>
         <section class="leads-table-card">
           <div class="leads-table-head"><span>Futura viatgera</span><span>Viatges</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div>

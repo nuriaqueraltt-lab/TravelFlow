@@ -47,6 +47,7 @@ function sectionFromClick(target) {
   }
 
   if (target.closest("[data-back-dashboard]")) return "Dashboard";
+  if (target.closest("[data-back-trips]")) return "Viatges";
   if (target.closest("[data-dashboard-lead], [data-dashboard-trip], [data-lead-id], [data-back-to-leads]")) return "Leads";
 
   return null;

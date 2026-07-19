@@ -7,6 +7,7 @@ const LEADS_CACHE_TTL = 5 * 60 * 1000;
 let leadsCache = null;
 let leadsCacheAt = 0;
 let leadsRequest = null;
+const tripLeadsCache = new Map();
 
 function normalizePhone(phone = "") { return String(phone).replace(/\D/g, ""); }
 function normalizeEmail(email = "") { return String(email).trim().toLowerCase(); }
@@ -20,7 +21,22 @@ function addDaysFrom(baseDate, days) { const date = new Date(baseDate); date.set
 function sortLeads(items) { return [...items].sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)); }
 function setLeadsCache(items) { leadsCache = sortLeads(items.filter((lead) => lead.active !== false)); leadsCacheAt = Date.now(); return leadsCache; }
 function upsertLeadCache(lead) { if (!leadsCache) return; const index = leadsCache.findIndex((item) => item.id === lead.id); if (index >= 0) leadsCache[index] = { ...leadsCache[index], ...lead }; else leadsCache.unshift(lead); leadsCache = sortLeads(leadsCache.filter((item) => item.active !== false)); leadsCacheAt = Date.now(); }
-export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; }
+export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); }
+
+export async function getLeadsByTrip(tripId, { force = false } = {}) {
+  if (!tripId) return [];
+  if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) {
+    return leadsCache.filter((lead) => Array.isArray(lead.tripIds) && lead.tripIds.includes(tripId));
+  }
+
+  const cached = tripLeadsCache.get(tripId);
+  if (!force && cached && Date.now() - cached.at < LEADS_CACHE_TTL) return cached.items;
+
+  const snapshot = await getDocs(query(collection(db, "leads"), where("tripIds", "array-contains", tripId)));
+  const items = snapshot.docs.map(mapDocument).filter((lead) => lead.active !== false);
+  tripLeadsCache.set(tripId, { items, at: Date.now() });
+  return items;
+}
 
 export async function createLead(input) {
   const currentUser = getCurrentUser();
@@ -65,6 +81,7 @@ export async function createLead(input) {
   await batch.commit();
 
   upsertLeadCache({ id: leadRef.id, ...leadData });
+  tripIds.forEach((tripId) => tripLeadsCache.delete(tripId));
   return { id: leadRef.id, fullName, channel: input.channel, source: input.source, tripIds, tripLabels, nextActionTitle: "Primer seguiment pendent", nextActionAt: firstFollowUpAt };
 }
 
@@ -74,6 +91,7 @@ export async function updateLead(leadId, input) {
   const tripIds = parseArrayValue(input.tripIds); const tripLabels = parseArrayValue(input.tripLabels); const fullName = [firstName, lastName].filter(Boolean).join(" "); const phone = input.phone?.trim() ?? "";
   const update = { firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone, phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email), instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "", notes: input.notes?.trim() ?? "", tripIds, tripLabels, interest: tripLabels.join(", "), updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
   await updateDoc(doc(db, "leads", leadId), update); upsertLeadCache({ id: leadId, ...update });
+  tripLeadsCache.clear();
   const taskSnapshot = await getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId), where("status", "==", TASK_STATUSES.PENDING)));
   const batch = writeBatch(db);
   batch.set(doc(collection(db, "activities")), { leadId, type: ACTIVITY_TYPES.NOTE, description: "Dades i etiquetes de la futura viatgera actualitzades.", createdBy: currentUser.uid, createdAt: serverTimestamp() });
