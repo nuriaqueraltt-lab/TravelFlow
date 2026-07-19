@@ -20,6 +20,7 @@ const SEED_SESSION_KEY = "travelflow:trip-catalogue-checked";
 let tripsCache = null;
 let tripsCacheAt = 0;
 let tripsRequest = null;
+const TRIP_PROCESS_KEYS = ["published", "sentToInterested", "sentToInfoGroup", "minimumTravelersConfirmed", "secondPaymentRequested", "travelersGroupCreated", "allSecondPaymentsPaid", "flightsPurchased", "insuranceIssued", "contractsSent", "finalPaymentConfirmed", "travelerInvoicesCreated", "supplierInvoicesCorrect"];
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function slugify(value = "") {
@@ -149,6 +150,25 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
   return { activated };
 }
 
+export async function updateTripOperations(tripId, { tourLeaderName = "", processChecklist = {} }) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (!tripId) throw new Error("TRIP_REQUIRED");
+  const checklist = Object.fromEntries(TRIP_PROCESS_KEYS.map((key) => [key, processChecklist[key] === true]));
+  const update = {
+    tourLeaderName: tourLeaderName.trim(),
+    processChecklist: checklist,
+    updatedBy: currentUser.uid,
+    updatedAt: serverTimestamp()
+  };
+  await updateDoc(doc(db, "trips", tripId), update);
+  if (tripsCache) {
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, tourLeaderName: update.tourLeaderName, processChecklist: checklist } : trip);
+    tripsCacheAt = Date.now();
+  }
+  return { tourLeaderName: update.tourLeaderName, processChecklist: checklist };
+}
+
 export function getTripErrorMessage(error) {
   const messages = {
     AUTH_REQUIRED: "La sessió ha caducat. Torna a iniciar sessió.",
@@ -159,6 +179,7 @@ export function getTripErrorMessage(error) {
     TRIP_CLOSING_REQUIRES_START: "Per indicar el tancament comercial, primer cal informar la data de sortida.",
     TRIP_DATE_ORDER: "La data de finalització no pot ser anterior a la d'inici.",
     TRIP_CLOSING_ORDER: "La data de tancament no pot ser posterior a la sortida.",
+    TRIP_REQUIRED: "No s'ha pogut identificar el viatge.",
     "permission-denied": "No tens permís per gestionar aquestes etiquetes de viatge."
   };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació amb el viatge.";

@@ -40,9 +40,9 @@ function renderCurrentTripCards(trips, bookings) {
     <article class="trips-hub-card">
       <div class="trips-hub-card__image" style="--trip-image: url('${escapeHtml(trip.imageUrl || "")}')"><span>${trip.year || "—"}</span></div>
       <div class="trips-hub-card__content">
-        <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span></div>
+        <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span><span class="trips-hub-card__leader">Tour Leader: <b>${escapeHtml(trip.tourLeaderName || "Pendent d'assignar")}</b></span></div>
         <section class="trips-hub-card__bookings"><h3>Reserves confirmades</h3>${renderBookingList(bookingsForTrip(bookings, trip.id))}</section>
-        <button class="secondary-button" type="button" data-open-trip="${trip.id}">Veure interessades →</button>
+        <button class="secondary-button" type="button" data-open-trip="${trip.id}">Obrir fitxa del viatge →</button>
       </div>
     </article>
   `).join("");
