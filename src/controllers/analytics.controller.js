@@ -153,7 +153,8 @@ function matchesDimensionFilters(lead, { bookingTripOnly = false } = {}) {
     if (bookingTripOnly ? !isBookedForTrip(lead, analyticsState.tripId) : !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
   }
   if (analyticsState.source && sourceKey(lead) !== analyticsState.source) return false;
-  if (analyticsState.status && lead.status !== analyticsState.status) return false;
+  const status = analyticsState.tripId ? getTripInterestStatus(lead, analyticsState.tripId) : lead.status;
+  if (analyticsState.status && status !== analyticsState.status) return false;
   return true;
 }
 
@@ -173,13 +174,19 @@ function previousBounds(bounds) {
 }
 
 function leadReachedStage(lead, stage) {
-  const status = lead.status;
-  if (stage === "created") return true;
-  if (stage === "info") return !["NEW"].includes(status);
-  if (stage === "follow") return ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER", "BOOKING_CONFIRMED", "LOST"].includes(status);
-  if (stage === "decision") return ["REPLIED", "PENDING_DECISION", "CONTACT_LATER", "BOOKING_CONFIRMED", "LOST"].includes(status);
-  if (stage === "booking") return status === "BOOKING_CONFIRMED";
-  return false;
+  const status = analyticsState.tripId ? getTripInterestStatus(lead, analyticsState.tripId) : lead.status || "NEW";
+  const stageIndex = { created: 0, info: 1, follow: 2, decision: 3, booking: 4 }[stage];
+  const statusIndex = {
+    NEW: 0,
+    INFO_SENT: 1,
+    FOLLOW_UP: 2,
+    REPLIED: 2,
+    PENDING_DECISION: 3,
+    CONTACT_LATER: 3,
+    BOOKING_CONFIRMED: 4,
+    LOST: 1
+  }[status] ?? 0;
+  return statusIndex >= stageIndex;
 }
 
 function groupBy(items, getKey) {
@@ -326,12 +333,15 @@ function renderLostReasons(leads) {
 
 function renderFunnel(leads) {
   const stages = FUNNEL_STAGES.map((stage) => ({ ...stage, count: leads.filter((lead) => leadReachedStage(lead, stage.key)).length }));
-  const max = stages[0]?.count || 1;
-  const drops = stages.slice(0, -1).map((stage, index) => ({
+  const total = stages[0]?.count || 0;
+  const bookings = stages.at(-1)?.count || 0;
+  const transitions = stages.slice(0, -1).map((stage, index) => ({
     label: `${stage.label} → ${stages[index + 1].label}`,
-    drop: stage.count - stages[index + 1].count
-  })).sort((a, b) => b.drop - a.drop);
-  return `<article class="analytics-card analytics-funnel-card"><header><div><span class="section-kicker">Estimació segons l’estat actual</span><h2>Embut comercial</h2></div>${drops[0] ? `<span>Major caiguda: ${escapeHtml(drops[0].label)}</span>` : ""}</header><div class="analytics-funnel">${stages.map((stage, index) => `<div class="analytics-funnel-stage" style="width:${Math.max((stage.count / max) * 100, 18)}%"><span>${stage.label}</span><strong>${stage.count}</strong>${index < stages.length - 1 ? `<small>${stages[index].count ? formatPercent(percentage(stages[index + 1].count, stages[index].count)) : "0%"} continuen</small>` : ""}</div>`).join("")}</div></article>`;
+    drop: Math.max(stage.count - stages[index + 1].count, 0)
+  }));
+  const mainDrop = [...transitions].sort((a, b) => b.drop - a.drop)[0];
+  if (!total) return `<article class="analytics-card analytics-funnel-card"><header><div><span class="section-kicker">Procés comercial</span><h2>Embut comercial</h2></div></header><div class="analytics-funnel-empty"><strong>No hi ha leads en aquest període</strong><p>Amplia el període o restableix els filtres per veure com avancen les futures viatgeres.</p><button type="button" data-analytics-range="all">Veure tot l’històric</button></div></article>`;
+  return `<article class="analytics-card analytics-funnel-card"><header><div><span class="section-kicker">Progressió estimada segons l’estat actual</span><h2>Embut comercial</h2></div><div class="analytics-funnel-summary"><strong>${formatPercent(percentage(bookings, total))}</strong><span>conversió final</span></div></header><div class="analytics-funnel">${stages.map((stage, index) => { const previous = stages[index - 1]; const progress = percentage(stage.count, total); const continuation = previous ? percentage(stage.count, previous.count) : 100; return `<div class="analytics-funnel-stage"><div><span>${index + 1}. ${stage.label}</span><strong>${stage.count}</strong></div><div class="analytics-funnel-track"><i style="width:${progress}%"></i></div><small>${index ? `${formatPercent(continuation)} passen des de l’etapa anterior` : `${total} leads rebuts en el període`}</small></div>`; }).join("")}</div>${mainDrop?.drop ? `<footer>Principal punt de pèrdua: <strong>${escapeHtml(mainDrop.label)}</strong> · ${mainDrop.drop} leads</footer>` : ""}</article>`;
 }
 
 function periodKey(date, mode) {
