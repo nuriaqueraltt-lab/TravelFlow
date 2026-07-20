@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -58,6 +59,20 @@ export async function getTrips({ force = false } = {}) {
     })
     .finally(() => { tripsRequest = null; });
   return tripsRequest;
+}
+
+export async function getTripById(tripId) {
+  if (!tripId) throw new Error("TRIP_REQUIRED");
+
+  const cachedTrip = tripsCache?.find((trip) => trip.id === tripId);
+  if (cachedTrip) return cachedTrip;
+
+  const snapshot = await getDoc(doc(db, "trips", tripId));
+  if (!snapshot.exists()) throw new Error("TRIP_REQUIRED");
+
+  const trip = mapDocument(snapshot);
+  if (trip.active === false) throw new Error("TRIP_REQUIRED");
+  return trip;
 }
 
 export async function seedInitialTrips() {
