@@ -1,0 +1,33 @@
+.leads-page .page-heading {
+  border: 1px solid rgba(38, 76, 62, .1);
+  background: linear-gradient(135deg, #ffffff, #f7f8f5);
+  box-shadow: 0 14px 34px rgba(38, 76, 62, .08);
+}
+
+.leads-page .page-heading::after {
+  border-color: rgba(38, 76, 62, .07);
+  box-shadow: 0 0 0 42px rgba(38, 76, 62, .025), 0 0 0 82px rgba(38, 76, 62, .015);
+}
+
+.leads-page .page-heading .section-kicker {
+  color: var(--color-brand-700);
+}
+
+.leads-page .page-heading h1 {
+  color: var(--color-text-primary);
+}
+
+.leads-page .page-heading p {
+  color: var(--color-text-secondary);
+}
+
+.leads-page .page-heading .primary-button {
+  border: 1px solid var(--color-brand-700);
+  background: var(--color-brand-800);
+  color: var(--color-white);
+  box-shadow: 0 8px 20px rgba(38, 76, 62, .14);
+}
+
+.leads-page .page-heading .primary-button:hover {
+  background: var(--color-brand-900);
+}
