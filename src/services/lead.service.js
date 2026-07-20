@@ -25,6 +25,7 @@ function addDaysFrom(baseDate, days) { const date = new Date(baseDate); date.set
 function sortLeads(items) { return [...items].sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)); }
 function setLeadsCache(items) { leadsCache = sortLeads(items.filter((lead) => lead.active !== false)); leadsCacheAt = Date.now(); return leadsCache; }
 function upsertLeadCache(lead) { if (!leadsCache) return; const index = leadsCache.findIndex((item) => item.id === lead.id); if (index >= 0) leadsCache[index] = { ...leadsCache[index], ...lead }; else leadsCache.unshift(lead); leadsCache = sortLeads(leadsCache.filter((item) => item.active !== false)); leadsCacheAt = Date.now(); }
+export function patchLeadCache(leadId, update) { if (!leadId || !update) return; upsertLeadCache({ id: leadId, ...update }); }
 export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null; }
 
 export async function getConfirmedBookings({ force = false } = {}) {

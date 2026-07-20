@@ -136,7 +136,8 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
   if (!endDate) throw new Error("TRIP_END_REQUIRED");
   if (endDate < startDate) throw new Error("TRIP_DATE_ORDER");
   if (closingDate && closingDate > startDate) throw new Error("TRIP_CLOSING_ORDER");
-  await updateDoc(doc(db, "trips", tripId), {
+  const cachedTrip = tripsCache?.find((trip) => trip.id === tripId);
+  const update = {
     startDate,
     endDate,
     closingDate,
@@ -145,14 +146,16 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
     datesPending: false,
     updatedBy: currentUser.uid,
     updatedAt: serverTimestamp()
-  });
-  invalidateTripsCache();
+  };
+  await updateDoc(doc(db, "trips", tripId), update);
+  if (tripsCache) {
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, ...update } : trip);
+    tripsCacheAt = Date.now();
+  }
 
-  const updatedTrips = await getTrips({ force: true });
-  const updatedTrip = updatedTrips.find((trip) => trip.id === tripId);
   const activated = await activateTripInformationFollowUps({
     tripId,
-    tripName: updatedTrip?.name || "viatge"
+    tripName: cachedTrip?.name || "viatge"
   });
   window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   return { activated };
