@@ -1,6 +1,7 @@
 import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, TRIP_PROCESS_STEPS, updateTripDates } from "../services/trip.service.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js";
 import { getConfirmedBookings } from "../services/lead.service.js";
+import { isBookedForTrip } from "../services/trip-interest.model.js";
 
 let tripsCache = [];
 
@@ -25,13 +26,13 @@ function currentTrips(trips) {
     .sort((a, b) => String(a.startDate || "9999-12-31").localeCompare(String(b.startDate || "9999-12-31")));
 }
 
-function renderBookingList(bookings) {
+function renderBookingList(bookings, tripId) {
   if (!bookings.length) return `<p class="trips-hub-card__empty">Encara no hi ha reserves confirmades.</p>`;
-  return `<ul class="trips-hub-bookings">${bookings.map((booking) => `<li><button type="button" data-lead-id="${booking.id}">${escapeHtml(booking.fullName)}</button><span class="${booking.bookingDui === true ? "is-dui" : ""}">${typeof booking.bookingDui === "boolean" ? `DUI: ${booking.bookingDui ? "Sí" : "No"}` : "DUI pendent"}</span></li>`).join("")}</ul>`;
+  return `<ul class="trips-hub-bookings">${bookings.map((booking) => { const dui = booking.tripInterests?.[tripId]?.dui ?? (booking.bookingTripId === tripId ? booking.bookingDui : undefined); return `<li><button type="button" data-lead-id="${booking.id}">${escapeHtml(booking.fullName)}</button><span class="${dui === true ? "is-dui" : ""}">${typeof dui === "boolean" ? `DUI: ${dui ? "Sí" : "No"}` : "DUI pendent"}</span></li>`; }).join("")}</ul>`;
 }
 
 function bookingsForTrip(bookings, tripId) {
-  return bookings.filter((booking) => (booking.bookingTripId || booking.tripIds?.[0]) === tripId);
+  return bookings.filter((booking) => isBookedForTrip(booking, tripId));
 }
 
 function processSummary(trip) {
@@ -55,7 +56,7 @@ function renderCurrentTripCards(trips, bookings) {
       <div class="trips-hub-card__content">
         <div><strong>${escapeHtml(trip.name.replace(/^\d{4}\s*-\s*/, ""))}</strong><span>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)}</span><span class="trips-hub-card__leader">Tour Leader: <b>${escapeHtml(trip.tourLeaderName || "Pendent d'assignar")}</b></span></div>
         <dl class="trips-hub-process"><div><dt>Última acció</dt><dd>${escapeHtml(process.last)}</dd></div><div><dt>Pròxima acció</dt><dd>${escapeHtml(process.next)}</dd></div></dl>
-        <section class="trips-hub-card__bookings"><h3>Reserves confirmades</h3>${renderBookingList(bookingsForTrip(bookings, trip.id))}</section>
+        <section class="trips-hub-card__bookings"><h3>Reserves confirmades</h3>${renderBookingList(bookingsForTrip(bookings, trip.id), trip.id)}</section>
         <button class="secondary-button" type="button" data-open-trip="${trip.id}">Obrir fitxa del viatge →</button>
       </div>
     </article>
