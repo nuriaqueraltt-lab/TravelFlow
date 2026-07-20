@@ -1,0 +1,179 @@
+/* Shared visual polish for reusable TravelFlow components.
+   This file only adjusts presentation and does not alter layout logic or data behaviour. */
+
+.primary-button,
+.secondary-button,
+.icon-button,
+.link-button,
+.lead-quick-actions button,
+.lead-trip-booking-actions button,
+.trip-edit-button,
+.analytics-premium-hero aside button,
+.analytics-funnel-empty button {
+  font-family: var(--font-body);
+}
+
+.primary-button {
+  min-height: 46px;
+  padding-inline: var(--space-5);
+  border-radius: 14px;
+  background: var(--color-brand-800);
+  box-shadow: 0 8px 20px rgba(47, 70, 59, .16);
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+.primary-button:hover {
+  background: var(--color-brand-900);
+  box-shadow: 0 12px 26px rgba(47, 70, 59, .2);
+  transform: translateY(-1px);
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.icon-button:focus-visible,
+.link-button:focus-visible,
+.lead-quick-actions button:focus-visible,
+.lead-trip-booking-actions button:focus-visible,
+.trip-edit-button:focus-visible {
+  outline: 3px solid rgba(95, 125, 108, .22);
+  outline-offset: 2px;
+}
+
+.secondary-button {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .92);
+  color: var(--color-brand-900);
+  box-shadow: 0 4px 12px rgba(44, 58, 51, .05);
+  font-weight: 750;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.secondary-button:hover {
+  border-color: rgba(75, 107, 90, .34);
+  background: var(--color-brand-050);
+  box-shadow: 0 7px 18px rgba(44, 58, 51, .07);
+  transform: translateY(-1px);
+}
+
+.secondary-button.is-danger {
+  border-color: rgba(185, 95, 95, .2);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.link-button {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border-radius: 9px;
+  color: var(--color-brand-700);
+  font-weight: 800;
+}
+
+.link-button:hover {
+  background: var(--color-brand-050);
+  color: var(--color-brand-900);
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 4px 14px rgba(44, 58, 51, .05);
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.icon-button:hover {
+  border-color: rgba(75, 107, 90, .28);
+  background: var(--color-brand-050);
+  color: var(--color-brand-800);
+  transform: translateY(-1px);
+}
+
+.content-card,
+.analytics-card,
+.analytics-premium-insights,
+.leads-table-card,
+.trip-operations-card,
+.trip-travelers-section,
+.trips-management-card,
+.trips-hub-card {
+  border-color: rgba(47, 70, 59, .1);
+  box-shadow: 0 8px 24px rgba(44, 58, 51, .06);
+}
+
+.content-card,
+.analytics-card,
+.analytics-premium-insights,
+.trip-operations-card,
+.trip-travelers-section {
+  border-radius: 22px;
+}
+
+.content-card__header h2,
+.analytics-card > header h2,
+.analytics-premium-insights > header h2,
+.trip-operations-card h2,
+.trip-travelers-section h2 {
+  color: var(--color-brand-900);
+  letter-spacing: -.02em;
+}
+
+.metric-card,
+.analytics-premium-metric,
+.trips-hub-summary > div,
+.trips-management-summary > div {
+  border-color: rgba(47, 70, 59, .1);
+  box-shadow: 0 8px 22px rgba(44, 58, 51, .055);
+}
+
+.lead-quick-actions button,
+.lead-trip-booking-actions button {
+  min-height: 40px;
+  border-radius: 12px;
+  font-weight: 750;
+}
+
+.lead-quick-actions button:not(.is-danger),
+.lead-trip-booking-actions button:not(.is-danger) {
+  border: 1px solid var(--color-border);
+  background: var(--color-white);
+  color: var(--color-brand-800);
+}
+
+.lead-quick-actions button:not(.is-danger):hover,
+.lead-trip-booking-actions button:not(.is-danger):hover {
+  border-color: rgba(75, 107, 90, .3);
+  background: var(--color-brand-050);
+}
+
+.lead-quick-actions button.is-danger,
+.lead-trip-booking-actions button.is-danger {
+  border: 1px solid rgba(185, 95, 95, .18);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: .58;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-button,
+  .secondary-button,
+  .icon-button,
+  .link-button,
+  .lead-quick-actions button,
+  .lead-trip-booking-actions button {
+    transition: none;
+  }
+}
