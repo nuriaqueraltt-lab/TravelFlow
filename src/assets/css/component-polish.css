@@ -167,13 +167,177 @@ button:disabled,
   transform: none;
 }
 
+/* Shared form controls */
+.lead-edit-form input,
+.lead-edit-form select,
+.lead-edit-form textarea,
+.lead-inline-form input,
+.lead-inline-form select,
+.lead-inline-form textarea,
+.quick-lead-form input,
+.quick-lead-form select,
+.quick-lead-form textarea,
+.trip-date-panel input,
+.trip-date-panel select,
+.trip-date-panel textarea,
+.trip-operations-card input,
+.trip-operations-card select,
+.trip-operations-card textarea,
+.user-admin-page input,
+.user-admin-page select,
+.user-admin-page textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: var(--color-white);
+  color: var(--color-text-primary);
+  font: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.lead-edit-form textarea,
+.lead-inline-form textarea,
+.quick-lead-form textarea,
+.trip-date-panel textarea,
+.trip-operations-card textarea,
+.user-admin-page textarea {
+  min-height: 112px;
+  padding-block: var(--space-3);
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.lead-edit-form input:focus,
+.lead-edit-form select:focus,
+.lead-edit-form textarea:focus,
+.lead-inline-form input:focus,
+.lead-inline-form select:focus,
+.lead-inline-form textarea:focus,
+.quick-lead-form input:focus,
+.quick-lead-form select:focus,
+.quick-lead-form textarea:focus,
+.trip-date-panel input:focus,
+.trip-date-panel select:focus,
+.trip-date-panel textarea:focus,
+.trip-operations-card input:focus,
+.trip-operations-card select:focus,
+.trip-operations-card textarea:focus,
+.user-admin-page input:focus,
+.user-admin-page select:focus,
+.user-admin-page textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-600);
+  box-shadow: 0 0 0 4px rgba(95, 125, 108, .12);
+}
+
+.lead-edit-form label,
+.lead-inline-form label,
+.quick-lead-form label,
+.trip-date-panel label,
+.trip-operations-card label,
+.user-admin-page label {
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 750;
+}
+
+.lead-edit-form fieldset,
+.quick-lead-form fieldset,
+.trip-operations-card fieldset {
+  min-width: 0;
+  border-color: rgba(47, 70, 59, .12);
+  border-radius: 16px;
+  background: var(--color-surface-soft);
+}
+
+.lead-edit-form legend,
+.quick-lead-form legend,
+.trip-operations-card legend {
+  padding-inline: var(--space-2);
+  color: var(--color-brand-900);
+  font-weight: 800;
+}
+
+.lead-edit-actions,
+.quick-lead-form__actions,
+.trip-operations-actions {
+  gap: var(--space-3);
+}
+
+/* Shared modal finish */
+.trip-date-modal__backdrop,
+.quick-lead-modal__backdrop,
+.lead-delete-modal__backdrop {
+  background: rgba(22, 32, 27, .56);
+  backdrop-filter: blur(3px);
+}
+
+.trip-date-panel,
+.quick-lead-panel,
+.lead-delete-panel {
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 24px;
+  box-shadow: 0 26px 70px rgba(22, 32, 27, .22);
+}
+
+.trip-date-panel__close,
+.quick-lead-panel__close,
+.lead-delete-panel__close {
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, .94);
+  color: var(--color-text-secondary);
+  box-shadow: 0 5px 15px rgba(44, 58, 51, .08);
+}
+
+.trip-date-panel__close:hover,
+.quick-lead-panel__close:hover,
+.lead-delete-panel__close:hover {
+  background: var(--color-brand-050);
+  color: var(--color-brand-900);
+}
+
+@media (max-width: 620px) {
+  .lead-edit-actions,
+  .quick-lead-form__actions,
+  .trip-operations-actions {
+    align-items: stretch;
+  }
+
+  .lead-edit-actions > button,
+  .quick-lead-form__actions > button,
+  .trip-operations-actions > button {
+    width: 100%;
+  }
+
+  .trip-date-panel,
+  .quick-lead-panel,
+  .lead-delete-panel {
+    border-radius: 22px 22px 0 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .primary-button,
   .secondary-button,
   .icon-button,
   .link-button,
   .lead-quick-actions button,
-  .lead-trip-booking-actions button {
+  .lead-trip-booking-actions button,
+  .lead-edit-form input,
+  .lead-edit-form select,
+  .lead-edit-form textarea,
+  .lead-inline-form input,
+  .lead-inline-form select,
+  .lead-inline-form textarea,
+  .quick-lead-form input,
+  .quick-lead-form select,
+  .quick-lead-form textarea,
+  .trip-date-panel input,
+  .trip-date-panel select,
+  .trip-date-panel textarea {
     transition: none;
   }
 }
