@@ -1,5 +1,5 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
-import { getTripErrorMessage, getTrips, TRIP_PROCESS_STEPS, updateTripOperations } from "../services/trip.service.js";
+import { getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations } from "../services/trip.service.js";
 import { getTripInterestStatus } from "../services/trip-interest.model.js";
 
 let currentTrip = null;
@@ -208,10 +208,9 @@ export async function showLeadsForTrip(tripId) {
   container.innerHTML = `<section class="leads-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant la fitxa del viatge...</p></div></section>`;
 
   try {
-    const [leads, trips] = await Promise.all([getLeadsByTrip(tripId), getTrips()]);
-    currentTrip = trips.find((item) => item.id === tripId);
+    const [leads, trip] = await Promise.all([getLeadsByTrip(tripId), getTripById(tripId)]);
+    currentTrip = trip;
     currentTripLeads = leads;
-    if (!currentTrip) throw new Error("TRIP_REQUIRED");
     container.innerHTML = renderTripDetail(currentTrip, currentTripLeads);
   } catch (error) {
     console.error("No s'ha pogut carregar la fitxa del viatge:", error);
