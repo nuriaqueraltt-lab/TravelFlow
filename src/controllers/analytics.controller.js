@@ -151,6 +151,14 @@ function isBookingForSelection(lead) {
   return selectedStatus(lead) === "BOOKING_CONFIRMED";
 }
 
+function bookingDateForSelection(lead) {
+  if (analyticsState.tripId) {
+    return toDate(lead.tripInterests?.[analyticsState.tripId]?.bookedAt)
+      || (lead.bookingTripId === analyticsState.tripId ? toDate(lead.bookedAt) : null);
+  }
+  return toDate(lead.bookedAt);
+}
+
 function formatPercent(value) {
   return `${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(value)}%`;
 }
@@ -415,7 +423,7 @@ function renderEvolution() {
     const createdAt = toDate(lead.createdAt);
     if (inRange(createdAt) && grouped.has(periodKey(createdAt, mode))) rowFor(createdAt).leads += 1;
     if (!isBookingForSelection(lead) || !matchesDimensionFilters(lead, { bookingTripOnly: true })) return;
-    const bookedAt = toDate(lead.bookedAt) || createdAt;
+    const bookedAt = bookingDateForSelection(lead) || createdAt;
     if (inRange(bookedAt) && grouped.has(periodKey(bookedAt, mode))) rowFor(bookedAt).bookings += 1;
   });
   const rows = [...grouped.values()].sort((a, b) => a.key.localeCompare(b.key));
