@@ -102,6 +102,8 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-retry-clients]")) { showClientsView(); return; }
+  const directClient = event.target.closest("[data-open-client-id]");
+  if (directClient) { window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } })); showDetail(directClient.dataset.openClientId); return; }
   const card = event.target.closest(".client-card[data-client-id]");
   if (card) { showDetail(card.dataset.clientId); return; }
   const reservation = event.target.closest("[data-client-reservation]");

@@ -1,9 +1,11 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing } from "../services/trip.service.js";
 import { getTripInterestStatus } from "../services/trip-interest.model.js";
+import { getClients } from "../services/client.service.js";
 
 let currentTrip = null;
 let currentTripLeads = [];
+let currentTripClients = [];
 let currentTripTab = "summary";
 
 const CHANNEL_LABELS = {
@@ -52,6 +54,10 @@ function escapeHtml(value = "") {
 
 function initials(name = "") {
   return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "FV";
+}
+
+function clientForLead(lead) {
+  return currentTripClients.find((client) => client.id === lead.clientId || client.leadIds?.includes(lead.id));
 }
 
 function formatDate(value) {
@@ -112,19 +118,20 @@ function renderSummary(trip, leads) {
   const conversion = leads.length ? Math.round((bookings.length / leads.length) * 100) : 0;
   const coordinatorAssigned = Boolean(trip.tourLeaderName?.trim());
   const bookingDetails = bookings.map((lead) => {
+    const client = clientForLead(lead);
     const booking = lead.tripInterests?.[trip.id] || {};
     const total = Number(booking.bookingTotal) || 0;
     const payments = Array.isArray(booking.payments) ? booking.payments : [];
     const paymentsTotal = payments.reduce((sum, payment) => sum + (Number(payment?.amount) || 0), 0);
     const paid = Math.max(0, Math.min(total, Number(booking.totalPaid ?? booking.paidTotal ?? paymentsTotal) || 0));
-    return { lead, booking, total, paid, pending: Math.max(0, total - paid) };
+    return { lead, client, booking, total, paid, pending: Math.max(0, total - paid) };
   });
   const totalPaid = bookingDetails.reduce((sum, item) => sum + item.paid, 0);
   const totalPending = bookingDetails.reduce((sum, item) => sum + item.pending, 0);
   const travelerDuis = bookingDetails.filter((item) => item.booking.dui === true).length;
   const totalDuis = travelerDuis + (coordinatorAssigned && trip.tourLeaderDui ? 1 : 0);
   const lastStep = [...TRIP_PROCESS_STEPS].reverse().find(([key]) => trip.processChecklist?.[key] === true)?.[1] || "Encara cap";
-  const reservationRows = bookingDetails.length ? bookingDetails.map(({ lead, booking, total, paid, pending }) => `<tr><td><button type="button" data-lead-id="${lead.id}">${escapeHtml(lead.fullName)}</button></td><td><span class="trip-summary-dui ${booking.dui ? "is-dui" : ""}">${booking.dui ? "Sí" : "No"}</span></td><td>${formatCurrency(total)}</td><td>${formatCurrency(paid)}</td><td><strong>${formatCurrency(pending)}</strong></td></tr>`).join("") : `<tr><td colspan="5" class="trip-summary-reservations__empty">Encara no hi ha reserves confirmades.</td></tr>`;
+  const reservationRows = bookingDetails.length ? bookingDetails.map(({ lead, client, booking, total, paid, pending }) => `<tr><td><button type="button" ${client ? `data-open-client-id="${client.id}"` : `data-lead-id="${lead.id}"`}>${escapeHtml(client?.fullName || lead.fullName)}</button></td><td><span class="trip-summary-dui ${booking.dui ? "is-dui" : ""}">${booking.dui ? "Sí" : "No"}</span></td><td>${formatCurrency(total)}</td><td>${formatCurrency(paid)}</td><td><strong>${formatCurrency(pending)}</strong></td></tr>`).join("") : `<tr><td colspan="5" class="trip-summary-reservations__empty">Encara no hi ha reserves confirmades.</td></tr>`;
 
   return `<section class="trip-summary-view">
     <section class="trip-summary-grid">
@@ -171,7 +178,7 @@ function renderBookingsView(leads) {
   const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED");
   const configured = bookings.filter((lead) => Array.isArray(lead.tripInterests?.[currentTrip?.id]?.bookingPriceConcepts));
   const total = configured.reduce((sum, lead) => sum + (Number(lead.tripInterests?.[currentTrip?.id]?.bookingTotal) || 0), 0);
-  const rows = bookings.map((lead) => { const booking = lead.tripInterests?.[currentTrip?.id] || {}; const concepts = Array.isArray(booking.bookingPriceConcepts) ? booking.bookingPriceConcepts : null; return `<button class="lead-row" type="button" data-lead-id="${lead.id}"><span class="lead-row__person"><span class="lead-row__avatar">${initials(lead.fullName)}</span><span><strong>${escapeHtml(lead.fullName)}</strong><small>${escapeHtml(lead.email || lead.phone || "Sense contacte")}</small></span></span><span>${booking.dui ? "DUI" : "Doble compartida / pendent"}</span><span>${concepts ? `${concepts.length} conceptes` : "Preu pendent"}</span><strong>${concepts ? formatCurrency(booking.bookingTotal) : "—"}</strong><span class="lead-status">Reserva confirmada</span><span>→</span></button>`; }).join("") || `<div class="leads-empty"><h2>Encara no hi ha reserves</h2><p>Quan una interessada confirmi la reserva apareixerà aquí.</p></div>`;
+  const rows = bookings.map((lead) => { const client = clientForLead(lead); const name = client?.fullName || lead.fullName; const contact = client?.email || client?.phone || lead.email || lead.phone || "Sense contacte"; const booking = lead.tripInterests?.[currentTrip?.id] || {}; const concepts = Array.isArray(booking.bookingPriceConcepts) ? booking.bookingPriceConcepts : null; return `<button class="lead-row" type="button" ${client ? `data-open-client-id="${client.id}"` : `data-lead-id="${lead.id}"`}><span class="lead-row__person"><span class="lead-row__avatar">${initials(name)}</span><span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(contact)}</small></span></span><span>${booking.dui ? "DUI" : "Doble compartida / pendent"}</span><span>${concepts ? `${concepts.length} conceptes` : "Preu pendent"}</span><strong>${concepts ? formatCurrency(booking.bookingTotal) : "—"}</strong><span class="lead-status">Reserva confirmada</span><span>→</span></button>`; }).join("") || `<div class="leads-empty"><h2>Encara no hi ha reserves</h2><p>Quan una interessada confirmi la reserva apareixerà aquí.</p></div>`;
   return `<section class="trip-travelers-section"><header><div><span class="section-kicker">Viatgeres confirmades</span><h2>Reserves</h2></div><span>${bookings.length} reserves confirmades</span></header><section class="trip-booking-financial-summary"><article><span>Reserves amb preu configurat</span><strong>${configured.length} de ${bookings.length}</strong></article><article><span>Import contractat total</span><strong>${formatCurrency(total)}</strong></article></section><section class="leads-table-card trip-booking-table"><div class="leads-table-head"><span>Viatgera</span><span>Habitació</span><span>Conceptes</span><span>Total</span><span>Estat</span><span></span></div><div>${rows}</div></section></section>`;
 }
 
@@ -278,9 +285,10 @@ export async function showLeadsForTrip(tripId) {
   container.innerHTML = `<section class="leads-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant la fitxa del viatge...</p></div></section>`;
 
   try {
-    const [leads, trip] = await Promise.all([getLeadsByTrip(tripId), getTripById(tripId)]);
+    const [leads, trip, clients] = await Promise.all([getLeadsByTrip(tripId), getTripById(tripId), getClients()]);
     currentTrip = trip;
     currentTripLeads = leads;
+    currentTripClients = clients;
     container.innerHTML = renderTripDetail(currentTrip, currentTripLeads);
   } catch (error) {
     console.error("No s'ha pogut carregar la fitxa del viatge:", error);
