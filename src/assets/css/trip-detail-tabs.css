@@ -600,3 +600,146 @@
   .trip-overview-card dl div { min-height: 76px; }
   .trip-summary-grid article { min-height: 126px; }
 }
+
+/* Fitxa del viatge: resum superior clar i amb menys pes visual. */
+.trip-overview-card {
+  grid-template-columns: minmax(230px, .72fr) minmax(0, 1.45fr);
+  border: 1px solid rgba(38, 76, 62, .11);
+  background: var(--color-white);
+  box-shadow: 0 8px 24px rgba(38, 76, 62, .055);
+}
+
+.trip-overview-card::after {
+  display: none;
+}
+
+.trip-overview-card__main {
+  min-height: 0;
+  justify-content: flex-start;
+  padding: var(--space-5) var(--space-6);
+  color: var(--color-text-primary);
+}
+
+.trip-overview-card__main .section-kicker {
+  color: var(--color-text-muted);
+  letter-spacing: .09em;
+}
+
+.trip-overview-card__main h2 {
+  max-width: none;
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--color-brand-900);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  line-height: 1.25;
+}
+
+.trip-overview-card__main p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.trip-overview-card__dui {
+  margin: var(--space-2) 0;
+  padding: 5px 9px;
+  border-color: rgba(38, 76, 62, .12);
+  background: var(--color-brand-050);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.trip-overview-card__dui strong {
+  color: var(--color-brand-900);
+}
+
+.trip-overview-card dl {
+  align-content: stretch;
+  padding: var(--space-4);
+  background: var(--color-surface-soft);
+  backdrop-filter: none;
+}
+
+.trip-overview-card dl div {
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border-color: rgba(38, 76, 62, .1);
+  background: rgba(255, 255, 255, .78);
+}
+
+.trip-overview-card dt {
+  color: var(--color-text-muted);
+  letter-spacing: .04em;
+}
+
+.trip-overview-card dd {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.trip-summary-grid {
+  gap: var(--space-3);
+}
+
+.trip-summary-grid article {
+  min-height: 92px;
+  gap: 4px;
+  align-content: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  box-shadow: 0 4px 14px rgba(38, 76, 62, .045);
+}
+
+.trip-summary-grid article::before {
+  width: 3px;
+  height: 100%;
+}
+
+.trip-summary-grid article:hover {
+  transform: none;
+  box-shadow: 0 6px 18px rgba(38, 76, 62, .065);
+}
+
+.trip-summary-grid article > span {
+  font-size: .67rem;
+  letter-spacing: .055em;
+}
+
+.trip-summary-grid strong {
+  margin-top: 2px;
+  font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+  line-height: 1.1;
+}
+
+.trip-summary-grid small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: .76rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .trip-overview-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .trip-overview-card__main {
+    padding: var(--space-5);
+  }
+
+  .trip-overview-card dl {
+    padding: 0 var(--space-4) var(--space-4);
+  }
+
+  .trip-overview-card dl div {
+    min-height: 58px;
+  }
+
+  .trip-summary-grid article {
+    min-height: 82px;
+  }
+}
