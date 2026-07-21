@@ -262,21 +262,28 @@
 }
 
 .trip-analytics-highlight {
-  padding: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--color-brand-200);
   border-radius: var(--radius-xl);
-  background: var(--color-brand-900);
-  color: var(--color-white);
+  background: linear-gradient(135deg, var(--color-brand-050), var(--color-white));
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.trip-analytics-highlight .section-kicker {
+  color: var(--color-brand-700);
 }
 
 .trip-analytics-highlight strong {
   display: block;
   margin: var(--space-2) 0;
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  color: var(--color-brand-900);
+  font-size: clamp(2rem, 4vw, 3rem);
 }
 
 .trip-analytics-highlight p {
   margin: 0;
-  opacity: .82;
+  color: var(--color-text-secondary);
 }
 
 .trip-analytics-grid {
