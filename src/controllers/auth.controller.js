@@ -14,6 +14,18 @@ import {
 
 let restoringSession = false;
 let logoutInProgress = false;
+let loginInProgress = false;
+
+const PROFILE_LOAD_TIMEOUT_MS = 15000;
+
+function withTimeout(promise, timeoutMs, errorCode) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(errorCode)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
 
 function getLoginElements() {
   const form = document.querySelector("#loginForm");
@@ -116,7 +128,11 @@ function continueToApp(form, profile) {
 
 async function authenticateAndLoadProfile(user, elements) {
   try {
-    const profile = await loadCurrentUserProfile(user);
+    const profile = await withTimeout(
+      loadCurrentUserProfile(user),
+      PROFILE_LOAD_TIMEOUT_MS,
+      "PROFILE_LOAD_TIMEOUT"
+    );
     setLoginState(elements);
     continueToApp(elements.form, profile);
   } catch (error) {
@@ -133,7 +149,7 @@ async function handleLoginSubmit(event) {
   const elements = getLoginElements();
   const { form, emailInput, passwordInput, rememberInput } = elements;
 
-  if (!form || form.dataset.authenticated === "true") return;
+  if (!form || form.dataset.authenticated === "true" || loginInProgress) return;
 
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -144,6 +160,7 @@ async function handleLoginSubmit(event) {
   }
 
   setLoginState(elements, { loading: true });
+  loginInProgress = true;
 
   try {
     const credential = await loginWithEmail(
@@ -157,11 +174,13 @@ async function handleLoginSubmit(event) {
       loading: false,
       error: getAuthErrorMessage(error)
     });
+  } finally {
+    loginInProgress = false;
   }
 }
 
 async function restoreExistingSession(user) {
-  if (!user || restoringSession) return;
+  if (!user || restoringSession || loginInProgress) return;
 
   const elements = getLoginElements();
   const { form, emailInput, passwordInput } = elements;
