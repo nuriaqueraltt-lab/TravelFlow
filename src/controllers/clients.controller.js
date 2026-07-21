@@ -25,11 +25,17 @@ function renderCard(client) {
   </button>`;
 }
 
-async function showList() {
+export async function showClientsView() {
   activate();
-  appContent().innerHTML = '<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant clientes...</p></div>';
-  try { appContent().innerHTML = renderList(await getClients()); }
-  catch { appContent().innerHTML = '<div class="clients-empty"><h2>No s’han pogut carregar les clientes</h2><p>Revisa la connexió i torna-ho a provar.</p></div>'; }
+  const root = appContent();
+  if (!root) return;
+  root.innerHTML = '<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant clientes...</p></div>';
+  try { root.innerHTML = renderList(await getClients()); }
+  catch (error) {
+    console.error("No s’han pogut carregar les clientes", error);
+    const permissionDenied = error?.code === "permission-denied";
+    root.innerHTML = `<div class="clients-empty"><h2>No s’han pogut carregar les clientes</h2><p>${permissionDenied ? "Cal publicar les noves regles de Firestore per accedir a aquesta secció." : "Revisa la connexió i torna-ho a provar."}</p><button class="secondary-button" type="button" data-retry-clients>Tornar-ho a provar</button></div>`;
+  }
 }
 
 function reservationRows(client) {
@@ -54,7 +60,7 @@ function renderDetail(client) {
 async function showDetail(clientId) {
   activate();
   const client = await getClient(clientId);
-  if (!client) return showList();
+  if (!client) return showClientsView();
   appContent().innerHTML = renderDetail(client);
 }
 
@@ -66,12 +72,13 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  const nav = event.target.closest(".sidebar-nav__item");
-  if (nav?.textContent.trim().startsWith("Clientes")) { showList(); return; }
+  if (event.target.closest("[data-retry-clients]")) { showClientsView(); return; }
   const card = event.target.closest("[data-client-id]");
   if (card) { showDetail(card.dataset.clientId); return; }
-  if (event.target.closest("[data-back-clients]")) showList();
+  if (event.target.closest("[data-back-clients]")) showClientsView();
 });
+
+window.addEventListener("travelflow:open-clients", () => showClientsView());
 
 document.addEventListener("submit", async (event) => {
   if (!event.target.matches("#clientForm")) return;
