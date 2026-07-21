@@ -112,7 +112,6 @@ function renderTabs(activeTab) {
 
 function renderSummary(trip, leads) {
   const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED");
-  const lost = leads.filter((lead) => lead.status === "LOST");
   const active = leads.filter((lead) => !["BOOKING_CONFIRMED", "LOST"].includes(lead.status));
   const completed = TRIP_PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
   const nextStep = TRIP_PROCESS_STEPS.find(([key]) => trip.processChecklist?.[key] !== true)?.[1] || "Checklist complet";
@@ -140,13 +139,10 @@ function renderSummary(trip, leads) {
 
   return `<section class="trip-summary-view">
     <section class="trip-summary-grid">
-      <article><span>Leads totals</span><strong>${leads.length}</strong><small>${active.length} encara actius</small></article>
       <article><span>Viatgeres + TL</span><strong>${bookings.length}${coordinatorAssigned ? " + 1" : " + 0"}</strong><small>${coordinatorAssigned ? escapeHtml(trip.tourLeaderName) : "Coordinadora pendent"}</small></article>
       <article><span>Total DUIs</span><strong>${totalDuis}</strong><small>${travelerDuis} viatgeres${coordinatorAssigned && trip.tourLeaderDui ? " + coordinadora" : ""}</small></article>
       <article><span>Total pagat</span><strong>${formatCurrency(totalPaid)}</strong><small>${conversion}% de conversió</small></article>
       <article><span>Total pendent</span><strong>${formatCurrency(totalPending)}</strong><small>${bookings.length} reserves confirmades</small></article>
-      <article><span>Leads perduts</span><strong>${lost.length}</strong><small>${leads.length ? Math.round((lost.length / leads.length) * 100) : 0}% del total</small></article>
-      <article><span>Operativa completada</span><strong>${completed}/${TRIP_PROCESS_STEPS.length}</strong><small>${escapeHtml(nextStep)}</small></article>
     </section>
     <section class="trip-overview-card">
       <div class="trip-overview-card__main">
