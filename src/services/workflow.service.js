@@ -25,6 +25,7 @@ import {
   TASK_TYPES
 } from "../config/app.constants.js";
 import { buildTripInterests, compatibleLeadStatus, hasActiveTripInterests, isBookedForTrip } from "./trip-interest.model.js";
+import { ensureClientForBooking } from "./client.service.js";
 
 const MAINTENANCE_KEY = "travelflow:dashboard-maintenance";
 const MAINTENANCE_TTL = 5 * 60 * 1000;
@@ -261,6 +262,8 @@ export async function confirmBooking(lead, { tripId, dui = false, priceConcepts 
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: wasBooked ? ACTIVITY_TYPES.NOTE : ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `${wasBooked ? "Reserva actualitzada" : "Reserva confirmada"} · ${tripName} · DUI: ${dui ? "Sí" : "No"} · Total: ${bookingTotal.toLocaleString("ca-ES", { style: "currency", currency: "EUR" })}.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt, ...(!wasBooked && !keepsOtherInterests ? { nextActionAt: null, nextActionTitle: "" } : {}), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
+  const clientId = await ensureClientForBooking(lead, { tripId, tripName, bookedAt, dui, priceConcepts: bookingPriceConcepts, total: bookingTotal });
+  await updateDoc(doc(db, "leads", lead.id), { clientId, updatedBy: user.uid, updatedAt: serverTimestamp() });
 }
 
 export async function cancelBooking(lead, { tripId }) {

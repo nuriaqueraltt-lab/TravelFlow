@@ -18,6 +18,23 @@ TravelFlow 1.0 se centra en la gestió de leads de Dones i Viatgeres. La base ha
 
 ## Col·leccions de la versió 1
 
+### `clients`
+
+Fitxa permanent de la viatgera creada o vinculada quan un lead confirma una reserva.
+
+- `fullName`, `fullNameSearch`
+- `address`, `postalCode`, `city`, `province`
+- `phone`, `phoneNormalized`, `email`, `emailNormalized`
+- `birthDate`
+- `dni`, `dniNormalized`, `dniExpiry`
+- `passport`, `passportExpiry`
+- `superTraveler`
+- `leadIds`: leads vinculats
+- `reservations.{tripId}`: instantània amb viatge, conceptes, total, DUI i dates
+- `active`, `createdBy`, `createdAt`, `updatedBy`, `updatedAt`
+
+La detecció de duplicats prioritza DNI i, si no està informat, correu o telèfon normalitzats. Els conceptes i imports es copien a la reserva de la clienta perquè els canvis posteriors al catàleg del viatge no alterin l'import contractat.
+
 ### `users`
 
 Document ID: UID de Firebase Authentication.

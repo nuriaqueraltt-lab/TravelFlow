@@ -88,6 +88,19 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /clients/{clientId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && createdByCurrentUser()
+        && request.resource.data.active == true;
+      allow update: if isAdmin()
+        || (isCommercial()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.active == resource.data.active);
+      allow delete: if false;
+    }
+
     match /activities/{activityId} {
       allow read: if isStaff();
       allow create: if isStaff()

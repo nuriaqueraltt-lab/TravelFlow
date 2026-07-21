@@ -117,7 +117,7 @@ function renderAppShell() {
           <span class="sidebar-nav__label">Espai de treball</span>
           ${renderSidebarItem({ icon: "dashboard", label: "Dashboard", active: true })}
           ${renderSidebarItem({ icon: "leads", label: "Leads" })}
-          ${renderSidebarItem({ icon: "clients", label: "Clientes", soon: true })}
+          ${renderSidebarItem({ icon: "clients", label: "Clientes" })}
           ${renderSidebarItem({ icon: "trips", label: "Viatges" })}
           ${renderSidebarItem({ icon: "analytics", label: "Analítica" })}
           ${renderSidebarItem({ icon: "tasks", label: "Tasques", soon: true })}

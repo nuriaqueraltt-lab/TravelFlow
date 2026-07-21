@@ -1,6 +1,7 @@
 const SECTION_KEYS = Object.freeze({
   Dashboard: "dashboard",
   Leads: "leads",
+  Clientes: "clients",
   Viatges: "trips",
   Analítica: "analytics",
   Configuració: "settings"
