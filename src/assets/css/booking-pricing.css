@@ -1,30 +1,258 @@
-.lead-booking-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.lead-booking-form > button { justify-self: end; }
-.booking-pricing, .booking-pricing-empty { grid-column: 1 / -1; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); padding: var(--space-5); }
-.booking-pricing[hidden], .booking-pricing-empty[hidden] { display: none; }
-.booking-pricing > header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
-.booking-pricing > header span, .booking-pricing > header strong { display: block; font-weight: 750; color: var(--color-text-primary); }
-.booking-pricing > header strong { font-size: 1.35rem; color: var(--color-brand-700); white-space: nowrap; }
-.booking-pricing > header small { display: block; margin-top: .25rem; color: var(--color-text-muted); font-weight: 500; }
-.booking-pricing__list { display: grid; gap: .6rem; }
-.booking-price-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .8rem; padding: .8rem 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-soft); cursor: pointer; }
-.booking-price-option:has(input:checked) { border-color: var(--color-brand-300); background: var(--color-brand-050); }
-.booking-price-option.is-required { cursor: default; }
-.booking-price-option input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--color-brand-600); }
-.booking-price-option span strong, .booking-price-option span small { display: block; }
-.booking-price-option span small { margin-top: .15rem; color: var(--color-text-muted); font-weight: 500; }
-.booking-price-option > b { color: var(--color-text-primary); white-space: nowrap; }
-.trip-booking-financial-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-5); }
-.trip-booking-financial-summary article { padding: var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-sm); }
-.trip-booking-financial-summary span, .trip-booking-financial-summary strong { display: block; }
-.trip-booking-financial-summary span { color: var(--color-text-muted); }
-.trip-booking-financial-summary strong { margin-top: .35rem; color: var(--color-brand-700); font-size: 1.45rem; }
-.trip-booking-table .leads-table-head, .trip-booking-table .lead-row { grid-template-columns: minmax(13rem, 1.8fr) minmax(8rem, 1fr) minmax(7rem, .8fr) minmax(7rem, .8fr) minmax(9rem, 1fr) 1.5rem; }
+.lead-booking-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lead-booking-form > button {
+  min-width: 12rem;
+  justify-self: end;
+}
+
+.booking-pricing,
+.booking-pricing-empty {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(92, 63, 70, .12);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: 0 14px 34px rgba(73, 45, 53, .065);
+}
+
+.booking-pricing[hidden],
+.booking-pricing-empty[hidden] {
+  display: none;
+}
+
+.booking-pricing-empty {
+  padding: var(--space-5);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.booking-pricing > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin: 0;
+  padding: var(--space-5);
+  border-bottom: 1px solid rgba(92, 63, 70, .1);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(197, 139, 151, .15), transparent 40%),
+    linear-gradient(135deg, #fff, var(--color-brand-050));
+}
+
+.booking-pricing > header span,
+.booking-pricing > header strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-weight: 780;
+}
+
+.booking-pricing > header span {
+  font-size: 1.05rem;
+}
+
+.booking-pricing > header strong {
+  min-width: 8.5rem;
+  padding: .75rem 1rem;
+  border: 1px solid rgba(154, 92, 105, .16);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .82);
+  color: var(--color-brand-900);
+  font-size: 1.55rem;
+  letter-spacing: -.035em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.booking-pricing > header small {
+  display: block;
+  margin-top: .3rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.booking-pricing__list {
+  display: grid;
+  gap: .7rem;
+  padding: var(--space-4);
+  background: #fbf9f8;
+}
+
+.booking-price-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .9rem;
+  min-height: 68px;
+  padding: .85rem 1rem;
+  border: 1px solid rgba(92, 63, 70, .11);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  box-shadow: 0 3px 12px rgba(73, 45, 53, .035);
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.booking-price-option:hover {
+  border-color: rgba(154, 92, 105, .3);
+  box-shadow: 0 8px 20px rgba(73, 45, 53, .07);
+  transform: translateY(-1px);
+}
+
+.booking-price-option:has(input:checked) {
+  border-color: rgba(154, 92, 105, .42);
+  background: linear-gradient(135deg, #fff, var(--color-brand-050));
+  box-shadow: inset 4px 0 0 var(--color-brand-500), 0 7px 18px rgba(73, 45, 53, .055);
+}
+
+.booking-price-option.is-required {
+  cursor: default;
+}
+
+.booking-price-option.is-required:hover {
+  transform: none;
+}
+
+.booking-price-option input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--color-brand-600);
+}
+
+.booking-price-option input[type="checkbox"]:disabled {
+  opacity: 1;
+}
+
+.booking-price-option span strong,
+.booking-price-option span small {
+  display: block;
+}
+
+.booking-price-option span strong {
+  color: var(--color-text-primary);
+  font-size: .96rem;
+}
+
+.booking-price-option span small {
+  width: fit-content;
+  margin-top: .3rem;
+  padding: .18rem .5rem;
+  border-radius: 999px;
+  background: rgba(92, 63, 70, .06);
+  color: var(--color-text-muted);
+  font-size: .7rem;
+  font-weight: 750;
+  letter-spacing: .025em;
+}
+
+.booking-price-option > b {
+  color: var(--color-brand-900);
+  font-size: 1rem;
+  letter-spacing: -.015em;
+  white-space: nowrap;
+}
+
+.trip-booking-financial-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.trip-booking-financial-summary article {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-5);
+  border: 1px solid rgba(92, 63, 70, .11);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(145deg, #fff, #fcf8f7);
+  box-shadow: 0 10px 26px rgba(73, 45, 53, .06);
+}
+
+.trip-booking-financial-summary article::after {
+  position: absolute;
+  top: -28px;
+  right: -22px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(197, 139, 151, .1);
+  content: "";
+}
+
+.trip-booking-financial-summary span,
+.trip-booking-financial-summary strong {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+.trip-booking-financial-summary span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
+.trip-booking-financial-summary strong {
+  margin-top: .45rem;
+  color: var(--color-brand-900);
+  font-size: clamp(1.45rem, 3vw, 1.8rem);
+  letter-spacing: -.035em;
+}
+
+.trip-booking-table .leads-table-head,
+.trip-booking-table .lead-row {
+  grid-template-columns: minmax(13rem, 1.8fr) minmax(8rem, 1fr) minmax(7rem, .8fr) minmax(7rem, .8fr) minmax(9rem, 1fr) 1.5rem;
+}
+
 @media (max-width: 720px) {
-  .lead-booking-form, .trip-booking-financial-summary { grid-template-columns: 1fr; }
-  .booking-pricing { padding: var(--space-4); }
-  .booking-pricing > header { align-items: flex-start; flex-direction: column; }
-  .booking-price-option { grid-template-columns: auto minmax(0, 1fr); }
-  .booking-price-option > b { grid-column: 2; }
-  .lead-booking-form > button { width: 100%; justify-self: stretch; }
+  .lead-booking-form,
+  .trip-booking-financial-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-pricing > header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: var(--space-4);
+  }
+
+  .booking-pricing > header strong {
+    width: 100%;
+    text-align: left;
+  }
+
+  .booking-pricing__list {
+    padding: var(--space-3);
+  }
+
+  .booking-price-option {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: .85rem;
+  }
+
+  .booking-price-option:hover {
+    transform: none;
+  }
+
+  .booking-price-option > b {
+    grid-column: 2;
+    font-size: 1.05rem;
+  }
+
+  .lead-booking-form > button {
+    width: 100%;
+    justify-self: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .booking-price-option {
+    transition: none;
+  }
 }
