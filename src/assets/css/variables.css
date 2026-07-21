@@ -4,6 +4,10 @@
   --color-brand-800: #3b5749;
   --color-brand-700: #4b6b5a;
   --color-brand-600: #5f7d6c;
+  --color-brand-500: #789586;
+  --color-brand-400: #96ad9f;
+  --color-brand-300: #b5c8bc;
+  --color-brand-200: #d1ded6;
   --color-brand-100: #e8efeb;
   --color-brand-050: #f3f7f4;
 
@@ -47,6 +51,7 @@
   --space-4: 1rem;
   --space-5: 1.25rem;
   --space-6: 1.5rem;
+  --space-7: 1.75rem;
   --space-8: 2rem;
   --space-10: 2.5rem;
   --space-12: 3rem;
@@ -71,4 +76,8 @@
   /* Motion */
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
+
+  /* Compatibility aliases used by older screens. */
+  --text-main: var(--color-text-primary);
+  --text-muted: var(--color-text-secondary);
 }
