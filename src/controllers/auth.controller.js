@@ -1,8 +1,7 @@
 import {
   getAuthErrorMessage,
   loginWithEmail,
-  logout,
-  observeAuthState
+  logout
 } from "../services/auth.service.js";
 import {
   clearCurrentUserProfile,
@@ -12,7 +11,6 @@ import {
   loadCurrentUserProfile
 } from "../services/user-profile.service.js";
 
-let restoringSession = false;
 let logoutInProgress = false;
 let loginInProgress = false;
 const ACCESS_TIMEOUT_MS = 15000;
@@ -113,7 +111,7 @@ function applyProfileToShell(profile) {
 function continueToApp(form, profile) {
   form.dataset.authenticated = "true";
   window.dispatchEvent(new CustomEvent("travelflow:open-app"));
-  applyProfileToShell(profile);
+  window.setTimeout(() => applyProfileToShell(profile), 0);
 }
 
 function withTimeout(promise, timeoutMs = ACCESS_TIMEOUT_MS, timeoutCode = "ACCESS_TIMEOUT") {
@@ -143,9 +141,9 @@ async function authenticateAndLoadProfile(user, elements) {
 
 async function handleLoginSubmit(event) {
   const elements = getLoginElements();
-  const { form, emailInput, passwordInput, rememberInput } = elements;
+  const { form, emailInput, passwordInput } = elements;
 
-  if (!form || form.dataset.authenticated === "true") return;
+  if (!form || form.dataset.authenticated === "true" || loginInProgress) return;
 
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -155,16 +153,12 @@ async function handleLoginSubmit(event) {
     return;
   }
 
-  setLoginState(elements, { loading: true, label: "Iniciant sessió..." });
   loginInProgress = true;
+  setLoginState(elements, { loading: true, label: "Iniciant sessió..." });
 
   try {
     const credential = await withTimeout(
-      loginWithEmail(
-        emailInput.value,
-        passwordInput.value,
-        Boolean(rememberInput?.checked)
-      ),
+      loginWithEmail(emailInput.value, passwordInput.value),
       ACCESS_TIMEOUT_MS,
       "AUTH_TIMEOUT"
     );
@@ -176,25 +170,6 @@ async function handleLoginSubmit(event) {
     });
   } finally {
     loginInProgress = false;
-  }
-}
-
-async function restoreExistingSession(user) {
-  if (!user || restoringSession || loginInProgress) return;
-
-  const elements = getLoginElements();
-  const { form, emailInput, passwordInput } = elements;
-  if (!form || form.dataset.authenticated === "true") return;
-
-  restoringSession = true;
-  setLoginState(elements, { loading: true, label: "Restaurant sessió..." });
-  emailInput.value = user.email ?? "sessio@travelflow.app";
-  passwordInput.value = "sessio-restaurada";
-
-  try {
-    await authenticateAndLoadProfile(user, elements);
-  } finally {
-    restoringSession = false;
   }
 }
 
@@ -262,5 +237,3 @@ document.addEventListener("keydown", (event) => {
     toggleUserMenu();
   }
 });
-
-observeAuthState(restoreExistingSession);

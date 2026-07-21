@@ -1,29 +1,16 @@
 import {
-  browserLocalPersistence,
-  browserSessionPersistence,
-  onAuthStateChanged,
-  setPersistence,
   signInWithEmailAndPassword,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 import { auth } from "./firebase.service.js";
 
-export async function loginWithEmail(email, password, rememberSession = false) {
-  const persistence = rememberSession
-    ? browserLocalPersistence
-    : browserSessionPersistence;
-
-  await setPersistence(auth, persistence);
+export async function loginWithEmail(email, password) {
   return signInWithEmailAndPassword(auth, email.trim(), password);
 }
 
 export function logout() {
   return signOut(auth);
-}
-
-export function observeAuthState(callback) {
-  return onAuthStateChanged(auth, callback);
 }
 
 export function getCurrentUser() {
