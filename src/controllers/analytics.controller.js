@@ -138,10 +138,17 @@ function percentage(part, total) {
   return total ? Math.round((part / total) * 1000) / 10 : 0;
 }
 
+function selectedStatus(lead) {
+  return analyticsState.tripId ? getTripInterestStatus(lead, analyticsState.tripId) : lead.status || "NEW";
+}
+
+function selectedLostReason(lead) {
+  if (!analyticsState.tripId) return lead.lostReason || "OTHER";
+  return lead.tripInterests?.[analyticsState.tripId]?.lostReason || lead.lostReason || "OTHER";
+}
+
 function isBookingForSelection(lead) {
-  if (lead.status !== "BOOKING_CONFIRMED") return false;
-  if (!analyticsState.tripId) return true;
-  return isBookedForTrip(lead, analyticsState.tripId);
+  return selectedStatus(lead) === "BOOKING_CONFIRMED";
 }
 
 function formatPercent(value) {
@@ -153,7 +160,7 @@ function matchesDimensionFilters(lead, { bookingTripOnly = false } = {}) {
     if (bookingTripOnly ? !isBookedForTrip(lead, analyticsState.tripId) : !(lead.tripIds || []).includes(analyticsState.tripId)) return false;
   }
   if (analyticsState.source && sourceKey(lead) !== analyticsState.source) return false;
-  const status = analyticsState.tripId ? getTripInterestStatus(lead, analyticsState.tripId) : lead.status;
+  const status = selectedStatus(lead);
   if (analyticsState.status && status !== analyticsState.status) return false;
   return true;
 }
@@ -174,7 +181,7 @@ function previousBounds(bounds) {
 }
 
 function leadReachedStage(lead, stage) {
-  const status = analyticsState.tripId ? getTripInterestStatus(lead, analyticsState.tripId) : lead.status || "NEW";
+  const status = selectedStatus(lead);
   const stageIndex = { created: 0, info: 1, follow: 2, decision: 3, booking: 4 }[stage];
   const statusIndex = {
     NEW: 0,
@@ -287,10 +294,10 @@ function buildInsights(leads, sources, trips) {
   const volume = sources[0];
   const quality = [...sources].filter((row) => row.leads >= 3).sort((a, b) => b.conversion - a.conversion || b.bookings - a.bookings)[0];
   const demand = [...trips].sort((a, b) => b.leads - a.leads)[0];
-  const lost = leads.filter((lead) => lead.status === "LOST");
-  const reasons = [...groupBy(lost, (lead) => lead.lostReason || "OTHER").entries()].map(([key, values]) => ({ key, count: values.length })).sort((a, b) => b.count - a.count);
+  const lost = leads.filter((lead) => selectedStatus(lead) === "LOST");
+  const reasons = [...groupBy(lost, selectedLostReason).entries()].map(([key, values]) => ({ key, count: values.length })).sort((a, b) => b.count - a.count);
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 3);
-  const stalled = leads.filter((lead) => ["NEW", "INFO_SENT"].includes(lead.status) && (toDate(lead.updatedAt) || toDate(lead.createdAt)) < cutoff).length;
+  const stalled = leads.filter((lead) => ["NEW", "INFO_SENT"].includes(selectedStatus(lead)) && (toDate(lead.updatedAt) || toDate(lead.createdAt)) < cutoff).length;
   if (volume) rows.push({ tone: "brand", title: `${volume.label} aporta més volum`, text: `${volume.leads} leads i ${volume.bookings} reserves en el període seleccionat.` });
   if (quality) rows.push({ tone: "success", title: `${quality.label} converteix millor`, text: `${formatPercent(quality.conversion)} de conversió sobre una mostra de ${quality.leads} leads.` });
   if (demand) rows.push({ tone: demand.conversion < 10 && demand.leads >= 3 ? "warning" : "brand", title: `${demand.name} genera més interès`, text: `${demand.leads} interessades, ${demand.bookings} reserves i ${formatPercent(demand.conversion)} de conversió.` });
@@ -317,18 +324,28 @@ function renderRanking(title, eyebrow, rows, valueKey, secondaryKey, emptyText) 
 }
 
 function renderStatusDistribution(leads) {
-  const rows = Object.entries(STATUS_LABELS).map(([key, label]) => ({ key, label, count: leads.filter((lead) => lead.status === key).length }));
+  const rows = Object.entries(STATUS_LABELS).map(([key, label]) => ({ key, label, count: leads.filter((lead) => selectedStatus(lead) === key).length }));
   const max = Math.max(...rows.map((row) => row.count), 1);
   return `<article class="analytics-card"><header><div><span class="section-kicker">Situació actual</span><h2>Estat dels leads</h2></div></header><div class="analytics-status-grid">${rows.map((row) => `<div><span>${row.label}</span><strong>${row.count}</strong><div class="analytics-mini-bar"><span style="width:${(row.count / max) * 100}%"></span></div></div>`).join("")}</div></article>`;
 }
 
 function renderLostReasons(leads) {
-  const lost = leads.filter((lead) => lead.status === "LOST");
+  const lost = leads.filter((lead) => selectedStatus(lead) === "LOST");
   const rows = Object.entries(LOST_LABELS).map(([key, label]) => {
-    const count = lost.filter((lead) => (lead.lostReason || "OTHER") === key).length;
+    const count = lost.filter((lead) => selectedLostReason(lead) === key).length;
     return { key, label, count, percentage: percentage(count, lost.length) };
   }).filter((row) => row.count > 0).sort((a, b) => b.count - a.count);
   return `<article class="analytics-card"><header><div><span class="section-kicker">Aprenentatges</span><h2>Motius de pèrdua</h2></div><span>${lost.length} perduts</span></header><div class="analytics-reasons">${rows.length ? rows.map((row) => `<div><div><strong>${row.label}</strong><small>${formatPercent(row.percentage)}</small></div><span>${row.count}</span></div>`).join("") : '<p class="analytics-empty">No hi ha leads perduts en aquest període.</p>'}</div></article>`;
+}
+
+function renderConversionSnapshot(leads) {
+  const bookings = leads.filter(isBookingForSelection).length;
+  const lost = leads.filter((lead) => selectedStatus(lead) === "LOST").length;
+  const active = Math.max(leads.length - bookings - lost, 0);
+  const closed = bookings + lost;
+  const closedConversion = percentage(bookings, closed);
+  const overallConversion = percentage(bookings, leads.length);
+  return `<article class="analytics-card analytics-conversion-snapshot"><header><div><span class="section-kicker">Qualitat de la conversió</span><h2>Resultat de les decisions tancades</h2></div><span>${closed} casos resolts</span></header><div class="analytics-conversion-snapshot__main"><div><strong>${formatPercent(closedConversion)}</strong><span>acaben en reserva quan ja hi ha una decisió</span></div><div class="analytics-conversion-snapshot__bar"><i style="width:${closedConversion}%"></i></div></div><div class="analytics-conversion-snapshot__breakdown"><div><span>Reserves</span><strong>${bookings}</strong></div><div><span>Perduts</span><strong>${lost}</strong></div><div><span>Encara actius</span><strong>${active}</strong></div><div><span>Conversió global</span><strong>${formatPercent(overallConversion)}</strong></div></div><p>La conversió global inclou tots els leads oberts. La conversió tancada només compara reserves amb leads ja perduts i mostra millor l’efectivitat comercial real.</p></article>`;
 }
 
 function renderFunnel(leads) {
@@ -397,7 +414,7 @@ function renderEvolution() {
     if (!matchesDimensionFilters(lead)) return;
     const createdAt = toDate(lead.createdAt);
     if (inRange(createdAt) && grouped.has(periodKey(createdAt, mode))) rowFor(createdAt).leads += 1;
-    if (lead.status !== "BOOKING_CONFIRMED" || !matchesDimensionFilters(lead, { bookingTripOnly: true })) return;
+    if (!isBookingForSelection(lead) || !matchesDimensionFilters(lead, { bookingTripOnly: true })) return;
     const bookedAt = toDate(lead.bookedAt) || createdAt;
     if (inRange(bookedAt) && grouped.has(periodKey(bookedAt, mode))) rowFor(bookedAt).bookings += 1;
   });
@@ -421,12 +438,12 @@ function renderAnalytics() {
   const priorBounds = previousBounds(bounds);
   const previousLeads = priorBounds ? filteredLeads(priorBounds) : [];
   const bookings = leads.filter(isBookingForSelection).length;
-  const followUps = leads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(lead.status)).length;
-  const lost = leads.filter((lead) => lead.status === "LOST").length;
+  const followUps = leads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(selectedStatus(lead))).length;
+  const lost = leads.filter((lead) => selectedStatus(lead) === "LOST").length;
   const conversion = percentage(bookings, leads.length);
   const previousBookings = previousLeads.filter(isBookingForSelection).length;
-  const previousFollowUps = previousLeads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(lead.status)).length;
-  const previousLost = previousLeads.filter((lead) => lead.status === "LOST").length;
+  const previousFollowUps = previousLeads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(selectedStatus(lead))).length;
+  const previousLost = previousLeads.filter((lead) => selectedStatus(lead) === "LOST").length;
   const previousConversion = percentage(previousBookings, previousLeads.length);
   const sources = aggregateSources(leads);
   const trips = aggregateTrips(leads);
@@ -445,6 +462,7 @@ function renderAnalytics() {
       ${renderMetric("Conversió", formatPercent(conversion), `${bookings} de ${leads.length} leads`, metricTrend(conversion, priorBounds ? previousConversion : null, { points: true }), "dark")}
     </section>
     ${renderInsights(buildInsights(leads, sources, trips))}
+    ${renderConversionSnapshot(leads)}
     ${renderSourcePerformance(sources)}
     <section class="analytics-two-column">
       ${renderRanking("Viatges que generen més interès", "Demanda", topInterest, "leads", "", "No hi ha viatges amb consultes.")}
