@@ -35,6 +35,8 @@ Fitxa permanent de la viatgera creada o vinculada quan un lead confirma una rese
 
 La detecció de duplicats prioritza DNI i, si no està informat, correu o telèfon normalitzats. Els conceptes i imports es copien a la reserva de la clienta perquè els canvis posteriors al catàleg del viatge no alterin l'import contractat.
 
+Cada entrada de `reservations.{tripId}` també pot guardar `roomType`, `roommate`, `departureCity`, `notes`, `payments`, `totalPaid` i `pendingAmount`. Els pagaments són una llista d'instantànies amb `id`, `amount`, `paidAt`, `method` i `reference`. Quan la reserva s'edita des de la clienta, els camps econòmics es repliquen atòmicament a `leads.tripInterests.{tripId}` perquè el resum del viatge mostri els mateixos totals.
+
 ### `users`
 
 Document ID: UID de Firebase Authentication.
