@@ -10,7 +10,7 @@ import {
   getProfileInitials,
   getRoleLabel,
   loadCurrentUserProfile
-} from "../services/user-profile.service.js?v=20260721-2";
+} from "../services/user-profile.service.js";
 import { showAppShell } from "../app.js?v=20260721-2";
 
 let restoringSession = false;

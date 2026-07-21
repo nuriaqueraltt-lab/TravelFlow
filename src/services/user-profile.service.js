@@ -5,7 +5,7 @@ import {
   setDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-import { db } from "./firebase.service.js?v=20260721-2";
+import { db } from "./firebase.service.js";
 
 export const USER_ROLES = Object.freeze({
   ADMIN: "ADMIN",
