@@ -1,6 +1,6 @@
 import { getLeadActivities, getLeadById, getLeadErrorMessage, getLeads, updateLead } from "../services/lead.service.js";
 import { updateLeadEntryChannel } from "../services/lead-channel.service.js";
-import { getTrips } from "../services/trip.service.js";
+import { DEFAULT_TRIP_PRICE_CONCEPTS, getTrips } from "../services/trip.service.js";
 import { LEAD_CHANNELS, LEAD_SOURCES } from "../config/app.constants.js";
 import {
   addExpiredLeadToNextYear,
@@ -35,6 +35,25 @@ const ENTRY_PRESETS = {
   RETURNING_CUSTOMER: { label: "Clienta repetidora", channel: LEAD_CHANNELS.OTHER, source: LEAD_SOURCES.RETURNING_CUSTOMER },
   OTHER: { label: "Altres", channel: LEAD_CHANNELS.OTHER, source: LEAD_SOURCES.OTHER }
 };
+
+function formatCurrency(value) { return new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" }).format(Number(value) || 0); }
+
+function bookingConceptsForTrip(lead, tripId) {
+  const trip = tripsCache.find((item) => item.id === tripId);
+  const catalogue = Array.isArray(trip?.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS;
+  const saved = Array.isArray(lead?.tripInterests?.[tripId]?.bookingPriceConcepts) ? lead.tripInterests[tripId].bookingPriceConcepts : [];
+  const savedById = new Map(saved.map((concept) => [concept.id, concept]));
+  const concepts = catalogue.map((concept) => savedById.get(concept.id) || concept);
+  saved.forEach((concept) => { if (!concepts.some((item) => item.id === concept.id)) concepts.push(concept); });
+  return concepts.map((concept, index) => ({ ...concept, order: index, selected: concept.application === "REQUIRED" || savedById.has(concept.id) }));
+}
+
+function renderBookingConcepts(lead, tripId, active) {
+  const concepts = bookingConceptsForTrip(lead, tripId);
+  if (!concepts.length) return `<div class="booking-pricing-empty" data-booking-pricing="${tripId}" ${active ? "" : "hidden"}>Aquest viatge encara no té conceptes de preu.</div>`;
+  const initialTotal = concepts.reduce((total, concept) => concept.selected && concept.application !== "INFORMATIONAL" ? total + (Number(concept.amount) || 0) : total, 0);
+  return `<section class="booking-pricing" data-booking-pricing="${tripId}" ${active ? "" : "hidden"}><header><div><span>Conceptes contractats</span><small>Els obligatoris ja estan inclosos. Marca els opcionals que corresponguin.</small></div><strong data-booking-total>${formatCurrency(initialTotal)}</strong></header><div class="booking-pricing__list">${concepts.map((concept) => `<label class="booking-price-option ${concept.application === "REQUIRED" ? "is-required" : ""}"><input type="checkbox" name="bookingConceptId" value="${escapeHtml(concept.id)}" data-concept-name="${escapeHtml(concept.name)}" data-concept-amount="${Number(concept.amount) || 0}" data-concept-application="${concept.application}" data-concept-price-status="${concept.priceStatus}" ${concept.selected ? "checked" : ""} ${concept.application === "REQUIRED" ? "disabled" : ""}><span><strong>${escapeHtml(concept.name)}</strong><small>${concept.application === "REQUIRED" ? "Obligatori" : concept.application === "INFORMATIONAL" ? "Informatiu · no suma al total" : "Opcional"}${concept.priceStatus === "ESTIMATED" ? " · estimat" : ""}</small></span><b>${formatCurrency(concept.amount)}</b></label>`).join("")}</div></section>`;
+}
 
 let leadsCache = [];
 let currentLeadId = null;
@@ -105,7 +124,7 @@ function currentEntryPreset(lead) { if (lead.entryPreset && ENTRY_PRESETS[lead.e
 function renderEntryOptions(lead) { const selected = currentEntryPreset(lead); return Object.entries(ENTRY_PRESETS).map(([value, preset]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${preset.label}</option>`).join(""); }
 function renderEditForm(lead) { return `<form class="lead-edit-form" data-form="edit"><div class="lead-edit-grid"><label>Nom *<input name="firstName" required value="${escapeHtml(lead.firstName || "")}"></label><label>Cognoms<input name="lastName" value="${escapeHtml(lead.lastName || "")}"></label><label>Telèfon<input name="phone" value="${escapeHtml(lead.phone || "")}"></label><label>Correu<input name="email" type="email" value="${escapeHtml(lead.email || "")}"></label><label>Instagram<input name="instagramHandle" value="${escapeHtml(lead.instagramHandle || "")}"></label><label>Facebook<input name="facebookUrl" value="${escapeHtml(lead.facebookUrl || "")}"></label><label>Canal d'entrada<select name="entryPreset">${renderEntryOptions(lead)}</select></label></div><label>Observacions<textarea name="notes">${escapeHtml(lead.notes || "")}</textarea></label><fieldset class="lead-edit-trips"><legend>Viatges i estat comercial</legend><p class="lead-edit-trips__hint">Cada viatge conserva el seu propi estat. Una reserva no tanca els altres interessos.</p>${renderTripSearch()}<div class="trip-tag-options-list">${renderTripOptions(lead)}</div></fieldset><div class="lead-edit-actions"><button type="button" class="secondary-button" data-cancel-edit>Cancel·lar</button><button class="primary-button primary-button--compact">Guardar canvis</button></div></form>`; }
 
-function renderTripRelationships(lead) { return (lead.tripIds || []).map((tripId, index) => { const status = getTripInterestStatus(lead, tripId); const dui = lead.tripInterests?.[tripId]?.dui || (lead.bookingTripId === tripId && lead.bookingDui); const booked = status === "BOOKING_CONFIRMED"; return `<article><div><strong>${escapeHtml(lead.tripLabels?.[index] || lead.tripInterests?.[tripId]?.tripName || "Viatge")}</strong><span class="lead-status">${STATUS_LABELS[status] || status}</span></div><small>${booked ? `Reserva confirmada${dui ? " · DUI" : ""}` : "Interès actiu"}</small><div class="lead-trip-booking-actions">${booked ? `<button type="button" data-edit-trip-booking="${tripId}">Editar reserva</button><button class="is-danger" type="button" data-cancel-trip-booking="${tripId}">Cancel·lar</button>` : `<button type="button" data-confirm-trip-booking="${tripId}">Confirmar reserva</button>`}</div></article>`; }).join("") || "<p>Encara no hi ha cap viatge vinculat.</p>"; }
+function renderTripRelationships(lead) { return (lead.tripIds || []).map((tripId, index) => { const status = getTripInterestStatus(lead, tripId); const interest = lead.tripInterests?.[tripId] || {}; const dui = interest.dui || (lead.bookingTripId === tripId && lead.bookingDui); const booked = status === "BOOKING_CONFIRMED"; const hasPricing = Array.isArray(interest.bookingPriceConcepts); return `<article><div><strong>${escapeHtml(lead.tripLabels?.[index] || interest.tripName || "Viatge")}</strong><span class="lead-status">${STATUS_LABELS[status] || status}</span></div><small>${booked ? `Reserva confirmada${dui ? " · DUI" : ""}${hasPricing ? ` · Total ${formatCurrency(interest.bookingTotal)}` : " · Preu pendent"}` : "Interès actiu"}</small><div class="lead-trip-booking-actions">${booked ? `<button type="button" data-edit-trip-booking="${tripId}">Editar reserva</button><button class="is-danger" type="button" data-cancel-trip-booking="${tripId}">Cancel·lar</button>` : `<button type="button" data-confirm-trip-booking="${tripId}">Confirmar reserva</button>`}</div></article>`; }).join("") || "<p>Encara no hi ha cap viatge vinculat.</p>"; }
 function renderExpiredLeadBanner(lead, tasks) { const pendingTask = tasks.find((task) => task.status === "PENDING" && task.type === "NEXT_YEAR_INTEREST"); if (!lead.lostAutomatically || !pendingTask) return ""; return `<section class="lead-action-panel"><div><span class="section-kicker">Viatge finalitzat</span><h2>Vols preguntar-li si vol viatjar l’any vinent?</h2><p>Aquest lead ha passat a perdut perquè el viatge ja ha finalitzat. Pots mantenir el contacte afegint-la a un viatge del proper any.</p></div><div class="lead-edit-actions"><button class="primary-button primary-button--compact" type="button" data-action="next-year">Afegir a interessades proper any</button><button class="secondary-button" type="button" data-action="decline-next-year">No està interessada</button></div></section>`; }
 
 function renderDetail(lead, activities, tasks) {
@@ -129,8 +148,10 @@ function renderActionForm(action, lead = null, pending = null, selectedTripId = 
     const selectedIndex = lead?.tripIds?.indexOf(selectedTripId) ?? -1;
     const selectedName = selectedIndex >= 0 ? lead.tripLabels?.[selectedIndex] || lead.tripInterests?.[selectedTripId]?.tripName || "Viatge" : "";
     const selectedDui = selectedTripId ? Boolean(lead.tripInterests?.[selectedTripId]?.dui || (lead.bookingTripId === selectedTripId && lead.bookingDui)) : Boolean(lead.bookingDui);
-    const options = (lead?.tripIds || []).map((tripId, index) => `<option value="${tripId}" ${lead.bookingTripId === tripId ? "selected" : ""}>${escapeHtml(lead.tripLabels?.[index] || "Viatge")}</option>`).join("");
-    return `<form class="lead-inline-form" data-form="booking">${selectedTripId ? `<label>Viatge de la reserva<input type="hidden" name="tripId" value="${selectedTripId}"><input value="${escapeHtml(selectedName)}" disabled></label>` : `<label>Viatge de la reserva<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label>`}<label class="checkbox-field"><input type="checkbox" name="dui" ${selectedDui ? "checked" : ""}><span>DUI · Habitació doble d'ús individual</span></label><button class="primary-button primary-button--compact">Guardar reserva</button></form>`;
+    const activeTripId = selectedTripId || lead.bookingTripId || "";
+    const options = (lead?.tripIds || []).map((tripId, index) => `<option value="${tripId}" ${activeTripId === tripId ? "selected" : ""}>${escapeHtml(lead.tripLabels?.[index] || "Viatge")}</option>`).join("");
+    const pricing = (lead?.tripIds || []).map((tripId) => renderBookingConcepts(lead, tripId, activeTripId === tripId)).join("");
+    return `<form class="lead-inline-form lead-booking-form" data-form="booking">${selectedTripId ? `<label>Viatge de la reserva<input type="hidden" name="tripId" value="${selectedTripId}"><input value="${escapeHtml(selectedName)}" disabled></label>` : `<label>Viatge de la reserva<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label>`}<label class="checkbox-field"><input type="checkbox" name="dui" ${selectedDui ? "checked" : ""}><span>DUI · Habitació doble d'ús individual</span></label>${pricing}<button class="primary-button primary-button--compact">Guardar reserva</button></form>`;
   }
   if (action === "next-year") { const nextYear = new Date().getFullYear() + 1; const options = tripsCache.filter((trip) => Number(trip.year) >= nextYear).map((trip) => `<option value="${trip.id}">${escapeHtml(trip.name)}</option>`).join(""); return `<form class="lead-inline-form" data-form="next-year"><label>Viatge del proper any<select name="tripId" required><option value="">Selecciona...</option>${options}</select></label><div></div><button class="primary-button primary-button--compact">Afegir a la llista</button></form>`; }
   return "";
@@ -207,6 +228,11 @@ document.addEventListener("click", async (event) => {
 document.addEventListener("input", (event) => { if (event.target.id === "leadsSearch") filterRows(); if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target); });
 document.addEventListener("change", (event) => {
   if (event.target.matches("#leadsSourceFilter, #leadsTripFilter, #leadsStatusFilter")) filterRows();
+  if (event.target.matches('.lead-booking-form select[name="tripId"]')) {
+    event.target.closest("form").querySelectorAll("[data-booking-pricing]").forEach((section) => { section.hidden = section.dataset.bookingPricing !== event.target.value; });
+    refreshBookingTotal(event.target.closest("form"));
+  }
+  if (event.target.matches('.lead-booking-form input[name="bookingConceptId"]')) refreshBookingTotal(event.target.closest("form"));
   if (event.target.matches('.lead-edit-form input[name="tripIds"]')) {
     const status = event.target.closest("[data-trip-option]")?.querySelector("[data-trip-status]");
     if (status) status.disabled = !event.target.checked;
@@ -225,9 +251,22 @@ document.addEventListener("submit", async (event) => {
     if (formType === "next-action") await saveManualNextAction({ lead, title: data.title, dueAt: data.dueAt });
     if (formType === "lost") await markLeadLost({ lead, reason: data.reason, note: data.note });
     if (formType === "next-year") await addExpiredLeadToNextYear({ leadId: currentLeadId, tripId: data.tripId });
-    if (formType === "booking") await confirmBooking(lead, { tripId: data.tripId, dui: formData.has("dui") });
+    if (formType === "booking") {
+      const pricing = event.target.querySelector(`[data-booking-pricing="${CSS.escape(data.tripId)}"]`);
+      const priceConcepts = [...(pricing?.querySelectorAll('input[type="checkbox"][name="bookingConceptId"]:checked') || [])].map((input) => ({ id: input.value, name: input.dataset.conceptName, amount: input.dataset.conceptAmount, application: input.dataset.conceptApplication, priceStatus: input.dataset.conceptPriceStatus }));
+      await confirmBooking(lead, { tripId: data.tripId, dui: formData.has("dui"), priceConcepts });
+    }
     if (formType === "edit") { const selected = [...event.target.querySelectorAll('input[name="tripIds"]:checked')]; data.tripIds = JSON.stringify(selected.map((input) => input.value)); data.tripLabels = JSON.stringify(selected.map((input) => input.dataset.tripLabel)); data.tripStatuses = JSON.stringify(Object.fromEntries(selected.map((input) => [input.value, event.target.querySelector(`[data-trip-status="${input.value}"]`)?.value || "NEW"]))); await updateLead(currentLeadId, data, lead); const preset = ENTRY_PRESETS[data.entryPreset] || ENTRY_PRESETS.OTHER; await updateLeadEntryChannel(currentLeadId, { ...preset, entryPreset: data.entryPreset || "OTHER", entryLabel: preset.label }, lead); }
     await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated"));
   } catch (error) { window.alert(formType === "edit" ? getLeadErrorMessage(error) : formType === "next-year" ? getExpiredLeadFollowUpError(error) : getWorkflowErrorMessage(error)); }
 });
+
+function refreshBookingTotal(form) {
+  const tripId = form?.querySelector('[name="tripId"]')?.value;
+  const section = tripId ? form.querySelector(`[data-booking-pricing="${CSS.escape(tripId)}"]`) : null;
+  if (!section) return;
+  const total = [...section.querySelectorAll('input[type="checkbox"][name="bookingConceptId"]:checked')].reduce((sum, input) => input.dataset.conceptApplication === "INFORMATIONAL" ? sum : sum + (Number(input.dataset.conceptAmount) || 0), 0);
+  const output = section.querySelector("[data-booking-total]");
+  if (output) output.textContent = formatCurrency(total);
+}
 window.addEventListener("travelflow:lead-created", (event) => { if (event.detail?.id) showLeadDetail(event.detail.id); });

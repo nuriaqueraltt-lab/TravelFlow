@@ -228,7 +228,23 @@ export async function markNoResponse(lead) {
   return { noResponseCount, nextActionTitle: title, nextActionAt: dueAt };
 }
 
-export async function confirmBooking(lead, { tripId, dui = false }) {
+function normalizeBookingPriceConcepts(priceConcepts = []) {
+  if (!Array.isArray(priceConcepts) || priceConcepts.length > 100) throw new Error("BOOKING_PRICING_INVALID");
+  const ids = new Set();
+  return priceConcepts.map((concept, index) => {
+    const id = String(concept?.id || "").trim();
+    const name = String(concept?.name || "").trim();
+    const amount = Number(concept?.amount);
+    const application = String(concept?.application || "OPTIONAL");
+    const priceStatus = String(concept?.priceStatus || "FINAL");
+    if (!id || ids.has(id) || !name || name.length > 120 || !Number.isFinite(amount) || amount < 0 || amount > 1000000) throw new Error("BOOKING_PRICING_INVALID");
+    if (!["REQUIRED", "OPTIONAL", "INFORMATIONAL"].includes(application) || !["FINAL", "ESTIMATED"].includes(priceStatus)) throw new Error("BOOKING_PRICING_INVALID");
+    ids.add(id);
+    return { id, name, amount: Math.round(amount * 100) / 100, application, priceStatus, order: index };
+  });
+}
+
+export async function confirmBooking(lead, { tripId, dui = false, priceConcepts = [] }) {
   const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
   if (!tripId || !lead.tripIds?.includes(tripId)) throw new Error("BOOKING_TRIP_REQUIRED");
   const tripIndex = lead.tripIds.indexOf(tripId);
@@ -236,11 +252,13 @@ export async function confirmBooking(lead, { tripId, dui = false }) {
   const tripInterests = buildTripInterests(lead, lead.tripIds, lead.tripLabels);
   const wasBooked = isBookedForTrip(lead, tripId);
   const bookedAt = tripInterests[tripId]?.bookedAt || (lead.bookingTripId === tripId ? lead.bookedAt : null) || serverTimestamp();
-  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.BOOKING_CONFIRMED, bookedAt, dui: Boolean(dui) };
+  const bookingPriceConcepts = normalizeBookingPriceConcepts(priceConcepts);
+  const bookingTotal = Math.round(bookingPriceConcepts.reduce((total, concept) => concept.application === "INFORMATIONAL" ? total : total + concept.amount, 0) * 100) / 100;
+  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.BOOKING_CONFIRMED, bookedAt, dui: Boolean(dui), bookingPriceConcepts, bookingTotal };
   const keepsOtherInterests = hasActiveTripInterests({ ...lead, tripInterests });
   const batch = writeBatch(db);
   if (!wasBooked && !keepsOtherInterests) await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
-  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: wasBooked ? ACTIVITY_TYPES.NOTE : ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `${wasBooked ? "Reserva actualitzada" : "Reserva confirmada"} · ${tripName} · DUI: ${dui ? "Sí" : "No"}.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
+  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: wasBooked ? ACTIVITY_TYPES.NOTE : ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `${wasBooked ? "Reserva actualitzada" : "Reserva confirmada"} · ${tripName} · DUI: ${dui ? "Sí" : "No"} · Total: ${bookingTotal.toLocaleString("ca-ES", { style: "currency", currency: "EUR" })}.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt, ...(!wasBooked && !keepsOtherInterests ? { nextActionAt: null, nextActionTitle: "" } : {}), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
 }
@@ -299,6 +317,6 @@ export async function completeTask(taskId) {
 }
 
 export function getWorkflowErrorMessage(error) {
-  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", BOOKING_TRIP_REQUIRED: "Selecciona el viatge de la reserva.", BOOKING_NOT_FOUND: "Aquesta reserva ja no existeix o ha canviat.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
+  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", BOOKING_TRIP_REQUIRED: "Selecciona el viatge de la reserva.", BOOKING_PRICING_INVALID: "Revisa els conceptes i imports de la reserva.", BOOKING_NOT_FOUND: "Aquesta reserva ja no existeix o ha canviat.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'acció.";
 }

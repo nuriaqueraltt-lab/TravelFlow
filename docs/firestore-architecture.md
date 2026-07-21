@@ -182,7 +182,21 @@ Catàleg mínim de viatges per relacionar interessos.
 }
 ```
 
-`priceConcepts` configura el catàleg econòmic del viatge. En una fase posterior, cada reserva guardarà una còpia dels conceptes seleccionats i dels seus imports per conservar el preu contractat encara que el catàleg general canviï.
+`priceConcepts` configura el catàleg econòmic del viatge. Cada reserva guarda una còpia dels conceptes seleccionats i dels seus imports per conservar el preu contractat encara que el catàleg general canviï.
+
+Cada reserva confirmada conserva aquesta instantània dins de `leads.tripInterests[tripId]`:
+
+```js
+{
+  status: "BOOKING_CONFIRMED",
+  bookingPriceConcepts: [
+    { id: "land-services", name: "Serveis terrestres", amount: 2300, application: "REQUIRED", priceStatus: "FINAL", order: 0 }
+  ],
+  bookingTotal: 2300
+}
+```
+
+Els conceptes amb aplicació `INFORMATIONAL` es guarden, però no s'inclouen a `bookingTotal`. La instantània evita que un canvi posterior al catàleg del viatge modifiqui una reserva existent.
 
 ### `notifications`
 
