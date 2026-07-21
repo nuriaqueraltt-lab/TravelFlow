@@ -8,11 +8,12 @@ import { firebaseConfig } from "../config/firebase.config.js";
 export const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 
-// Safari pot mantenir oberta la connexió WebChannel però no confirmar les
-// escriptures. La detecció automàtica de long polling fa que Firestore canviï
-// de transport quan el canal està bloquejat, sense alterar la resta de l'app.
+// Safari pot deixar una connexió WebChannel pendent sense retornar ni dades
+// ni cap error. Forcem long polling i evitem fetch streams perquè totes les
+// lectures i escriptures acabin amb una resposta verificable.
 export const db = initializeFirestore(firebaseApp, {
-  experimentalAutoDetectLongPolling: true
+  experimentalForceLongPolling: true,
+  useFetchStreams: false
 });
 
 export const storage = getStorage(firebaseApp);
