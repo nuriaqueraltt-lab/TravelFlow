@@ -11,23 +11,9 @@ import {
   getRoleLabel,
   loadCurrentUserProfile
 } from "../services/user-profile.service.js";
-import { showAppShell } from "../app.js?v=20260721-2";
 
 let restoringSession = false;
 let logoutInProgress = false;
-let loginInProgress = false;
-
-const PROFILE_LOAD_TIMEOUT_MS = 15000;
-const AUTH_TIMEOUT_MS = 15000;
-
-function withTimeout(promise, timeoutMs, errorCode) {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = window.setTimeout(() => reject(new Error(errorCode)), timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
-}
 
 function getLoginElements() {
   const form = document.querySelector("#loginForm");
@@ -55,12 +41,6 @@ function setLoginState({ submitButton, message }, { loading = false, error = "" 
     message.textContent = error;
     message.classList.toggle("is-error", Boolean(error));
   }
-}
-
-function setLoginProgress(elements, label) {
-  setLoginState(elements, { loading: true });
-  const buttonLabel = elements.submitButton?.querySelector("span");
-  if (buttonLabel) buttonLabel.textContent = label;
 }
 
 function renderUserMenu(profile) {
@@ -128,31 +108,24 @@ function applyProfileToShell(profile) {
   window.dispatchEvent(new CustomEvent("travelflow:user-ready", { detail: profile }));
 }
 
-function continueToApp(profile) {
-  document.body.dataset.userRole = profile.role;
-  document.body.dataset.userUid = profile.uid;
-  showAppShell();
-  applyProfileToShell(profile);
+function continueToApp(form, profile) {
+  form.dataset.authenticated = "true";
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  requestAnimationFrame(() => requestAnimationFrame(() => applyProfileToShell(profile)));
 }
 
 async function authenticateAndLoadProfile(user, elements) {
   try {
-    const profile = await withTimeout(
-      loadCurrentUserProfile(user),
-      PROFILE_LOAD_TIMEOUT_MS,
-      "PROFILE_LOAD_TIMEOUT"
-    );
+    const profile = await loadCurrentUserProfile(user);
     setLoginState(elements);
-    continueToApp(profile);
+    continueToApp(elements.form, profile);
   } catch (error) {
     clearCurrentUserProfile();
+    await logout().catch(() => {});
     setLoginState(elements, {
       loading: false,
       error: getProfileErrorMessage(error)
     });
-    // Tancar la sessió és una neteja secundària: mai ha de mantenir
-    // bloquejada la pantalla si Firebase o Safari deixen la petició pendent.
-    void logout().catch(() => {});
   }
 }
 
@@ -160,7 +133,7 @@ async function handleLoginSubmit(event) {
   const elements = getLoginElements();
   const { form, emailInput, passwordInput, rememberInput } = elements;
 
-  if (!form || form.dataset.authenticated === "true" || loginInProgress) return;
+  if (!form || form.dataset.authenticated === "true") return;
 
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -170,33 +143,25 @@ async function handleLoginSubmit(event) {
     return;
   }
 
-  setLoginProgress(elements, "Iniciant sessió...");
-  loginInProgress = true;
+  setLoginState(elements, { loading: true });
 
   try {
-    const credential = await withTimeout(
-      loginWithEmail(
-        emailInput.value,
-        passwordInput.value,
-        Boolean(rememberInput?.checked)
-      ),
-      AUTH_TIMEOUT_MS,
-      "AUTH_TIMEOUT"
+    const credential = await loginWithEmail(
+      emailInput.value,
+      passwordInput.value,
+      Boolean(rememberInput?.checked)
     );
-    setLoginProgress(elements, "Carregant perfil...");
     await authenticateAndLoadProfile(credential.user, elements);
   } catch (error) {
     setLoginState(elements, {
       loading: false,
       error: getAuthErrorMessage(error)
     });
-  } finally {
-    loginInProgress = false;
   }
 }
 
 async function restoreExistingSession(user) {
-  if (!user || restoringSession || loginInProgress) return;
+  if (!user || restoringSession) return;
 
   const elements = getLoginElements();
   const { form, emailInput, passwordInput } = elements;
