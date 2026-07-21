@@ -57,6 +57,12 @@ function setLoginState({ submitButton, message }, { loading = false, error = "" 
   }
 }
 
+function setLoginProgress(elements, label) {
+  setLoginState(elements, { loading: true });
+  const buttonLabel = elements.submitButton?.querySelector("span");
+  if (buttonLabel) buttonLabel.textContent = label;
+}
+
 function renderUserMenu(profile) {
   const roleLabel = getRoleLabel(profile.role);
   return `
@@ -140,11 +146,12 @@ async function authenticateAndLoadProfile(user, elements) {
     continueToApp(profile);
   } catch (error) {
     clearCurrentUserProfile();
-    await logout().catch(() => {});
     setLoginState(elements, {
       loading: false,
       error: getProfileErrorMessage(error)
     });
+    // Session cleanup must never keep the login screen blocked.
+    void logout().catch(() => {});
   }
 }
 
@@ -162,7 +169,7 @@ async function handleLoginSubmit(event) {
     return;
   }
 
-  setLoginState(elements, { loading: true });
+  setLoginProgress(elements, "Iniciant sessió...");
   loginInProgress = true;
 
   try {
@@ -175,6 +182,7 @@ async function handleLoginSubmit(event) {
       AUTH_TIMEOUT_MS,
       "AUTH_TIMEOUT"
     );
+    setLoginProgress(elements, "Carregant perfil...");
     await authenticateAndLoadProfile(credential.user, elements);
   } catch (error) {
     setLoginState(elements, {
