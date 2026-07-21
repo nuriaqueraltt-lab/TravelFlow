@@ -44,13 +44,13 @@ function reservationRows(client) {
   return reservations.map((item) => { const paid = Number(item.totalPaid) || (item.payments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0); const pending = Math.max(0, (Number(item.total) || 0) - paid); return `<button class="client-trip" type="button" data-client-reservation="${esc(item.tripId)}"><div><strong>${esc(item.tripName || "Viatge")}</strong><span>Reserva confirmada · ${date(item.bookedAt?.toDate?.() || item.bookedAt)}</span><small>${item.dui ? "DUI" : "Habitació compartida"}</small></div><div><span>Pagat ${money(paid)}</span><strong>${money(pending)} pendent</strong><small>Veure i editar →</small></div></button>`; }).join("") || '<p class="clients-muted">No hi ha viatges vinculats.</p>';
 }
 
-function field(label, name, value = "", type = "text") { return `<label><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}"></label>`; }
+function field(label, name, value = "", type = "text", required = false) { return `<label><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${required ? "required" : ""}></label>`; }
 
 function renderDetail(client) {
   return `<section class="client-detail-page"><button class="lead-detail-back" type="button" data-back-clients>← Tornar a clientes</button>
     <header class="client-detail-hero"><span class="client-detail-hero__avatar">${initials(client.fullName)}</span><div><span class="section-kicker">Fitxa de clienta</span><h1>${esc(client.fullName)}</h1><p>${esc(client.email || client.phone || "Completa les seves dades personals")}</p></div>${client.superTraveler ? '<span class="super-traveler-badge">★ Superviatgera</span>' : ""}</header>
     <div class="client-detail-grid"><form class="content-card client-form" id="clientForm" data-client-id="${client.id}"><header><div><span class="section-kicker">Informació personal</span><h2>Dades de la clienta</h2></div><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></header><div class="client-form-grid">
-      ${field("Nom i cognoms", "fullName", client.fullName)}${field("Telèfon", "phone", client.phone, "tel")}${field("Correu electrònic", "email", client.email, "email")}${field("Data de naixement", "birthDate", client.birthDate, "date")}
+      ${field("Nom i cognoms", "fullName", client.fullName, "text", true)}${field("Telèfon", "phone", client.phone, "tel")}${field("Correu electrònic", "email", client.email, "email")}${field("Data de naixement", "birthDate", client.birthDate, "date")}
       <label class="client-form-wide"><span>Adreça</span><input name="address" value="${esc(client.address)}"></label>${field("Codi postal", "postalCode", client.postalCode)}${field("Població", "city", client.city)}${field("Província", "province", client.province)}
       ${field("DNI", "dni", client.dni)}${field("Caducitat DNI", "dniExpiry", client.dniExpiry, "date")}${field("Passaport", "passport", client.passport)}${field("Caducitat passaport", "passportExpiry", client.passportExpiry, "date")}
       <label class="client-super-toggle"><input name="superTraveler" type="checkbox" ${client.superTraveler ? "checked" : ""}><span><strong>Superviatgera</strong><small>Clienta fidel o amb tracte especial</small></span></label>
@@ -129,10 +129,20 @@ document.addEventListener("submit", async (event) => {
   if (!event.target.matches("#clientForm")) return;
   event.preventDefault();
   const form = event.target; const message = form.querySelector(".client-form-message");
+  const submitButton = form.querySelector('button[type="submit"]');
   const values = Object.fromEntries(new FormData(form)); values.superTraveler = form.elements.superTraveler.checked;
   const id = form.dataset.clientId;
-  try { message.textContent = "Guardant..."; await updateClient(id, values); message.textContent = "Dades guardades correctament."; await showDetail(id); }
-  catch (error) { message.textContent = error.message === "CLIENT_DUPLICATE" ? "Ja existeix una altra clienta amb aquest DNI, correu o telèfon." : "No s’han pogut guardar les dades."; }
+  try {
+    submitButton.disabled = true; submitButton.textContent = "Guardant..."; message.textContent = "Guardant...";
+    const saved = await updateClient(id, values);
+    appContent().innerHTML = renderDetail(saved);
+    const savedMessage = document.querySelector(".client-form-message");
+    if (savedMessage) savedMessage.textContent = "Dades guardades correctament.";
+  }
+  catch (error) {
+    submitButton.disabled = false; submitButton.textContent = "Guardar canvis";
+    message.textContent = error.message === "CLIENT_DUPLICATE" ? "Ja existeix una altra clienta amb aquest DNI, correu o telèfon." : error.message === "CLIENT_NAME_REQUIRED" ? "El nom i els cognoms són obligatoris." : "No s’han pogut guardar les dades. Torna-ho a provar.";
+  }
 });
 
 function refreshReservationTotals() {
