@@ -11,12 +11,14 @@ import {
   getRoleLabel,
   loadCurrentUserProfile
 } from "../services/user-profile.service.js";
+import { showAppShell } from "../app.js?v=20260721-1";
 
 let restoringSession = false;
 let logoutInProgress = false;
 let loginInProgress = false;
 
 const PROFILE_LOAD_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_MS = 15000;
 
 function withTimeout(promise, timeoutMs, errorCode) {
   let timeoutId;
@@ -122,7 +124,7 @@ function applyProfileToShell(profile) {
 
 function continueToApp(form, profile) {
   form.dataset.authenticated = "true";
-  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  showAppShell();
   requestAnimationFrame(() => requestAnimationFrame(() => applyProfileToShell(profile)));
 }
 
@@ -163,10 +165,14 @@ async function handleLoginSubmit(event) {
   loginInProgress = true;
 
   try {
-    const credential = await loginWithEmail(
-      emailInput.value,
-      passwordInput.value,
-      Boolean(rememberInput?.checked)
+    const credential = await withTimeout(
+      loginWithEmail(
+        emailInput.value,
+        passwordInput.value,
+        Boolean(rememberInput?.checked)
+      ),
+      AUTH_TIMEOUT_MS,
+      "AUTH_TIMEOUT"
     );
     await authenticateAndLoadProfile(credential.user, elements);
   } catch (error) {

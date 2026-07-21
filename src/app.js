@@ -163,7 +163,7 @@ function setupShellInteractions() {
   }));
 }
 
-function showAppShell() {
+export function showAppShell() {
   const appRoot = document.querySelector("#app");
   appRoot.innerHTML = renderAppShell();
   setupShellInteractions();

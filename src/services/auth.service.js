@@ -37,6 +37,7 @@ export function getAuthErrorMessage(error) {
     "auth/missing-password": "Introdueix la contrasenya.",
     "auth/too-many-requests": "Hi ha hagut massa intents. Torna-ho a provar més tard.",
     "auth/network-request-failed": "No s'ha pogut connectar. Revisa la connexió a internet.",
+    AUTH_TIMEOUT: "Firebase està tardant massa a iniciar la sessió. Torna-ho a provar.",
     "auth/user-disabled": "Aquest usuari està desactivat."
   };
 
