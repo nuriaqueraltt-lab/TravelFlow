@@ -1,5 +1,5 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
-import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing } from "../services/trip.service.js";
+import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing, updateTripSupplierPayments } from "../services/trip.service.js";
 import { getTripInterestStatus } from "../services/trip-interest.model.js";
 import { getClients } from "../services/client.service.js";
 
@@ -33,6 +33,7 @@ const TAB_LABELS = {
   summary: "Resum",
   leads: "Leads",
   bookings: "Reserves",
+  suppliers: "Proveïdors",
   pricing: "Preus",
   operations: "Operativa",
   analytics: "Analítica"
@@ -128,10 +129,14 @@ function renderSummary(trip, leads) {
   });
   const totalPaid = bookingDetails.reduce((sum, item) => sum + item.paid, 0);
   const totalPending = bookingDetails.reduce((sum, item) => sum + item.pending, 0);
+  const supplierPayments = getSupplierPayments(trip);
+  const totalSupplierPaid = supplierPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const currentProfit = totalPaid - totalSupplierPaid;
   const travelerDuis = bookingDetails.filter((item) => item.booking.dui === true).length;
   const totalDuis = travelerDuis + (coordinatorAssigned && trip.tourLeaderDui ? 1 : 0);
   const lastStep = [...TRIP_PROCESS_STEPS].reverse().find(([key]) => trip.processChecklist?.[key] === true)?.[1] || "Encara cap";
   const reservationRows = bookingDetails.length ? bookingDetails.map(({ lead, client, booking, total, paid, pending }) => `<tr><td><button type="button" ${client ? `data-open-client-id="${client.id}"` : `data-lead-id="${lead.id}"`}>${escapeHtml(client?.fullName || lead.fullName)}</button></td><td><span class="trip-summary-dui ${booking.dui ? "is-dui" : ""}">${booking.dui ? "Sí" : "No"}</span></td><td>${formatCurrency(total)}</td><td>${formatCurrency(paid)}</td><td><strong>${formatCurrency(pending)}</strong></td></tr>`).join("") : `<tr><td colspan="5" class="trip-summary-reservations__empty">Encara no hi ha reserves confirmades.</td></tr>`;
+  const supplierRows = supplierPayments.length ? supplierPayments.map((payment) => `<tr><td><strong>${escapeHtml(payment.supplierName)}</strong></td><td>${escapeHtml(payment.concept)}</td><td>${formatDate(`${payment.paymentDate}T12:00:00`)}</td><td>${escapeHtml(paymentMethodLabel(payment.paymentMethod))}</td><td><strong>${formatCurrency(payment.amount)}</strong></td></tr>`).join("") : `<tr><td colspan="5" class="trip-summary-reservations__empty">Encara no hi ha pagaments a proveïdors registrats.</td></tr>`;
 
   return `<section class="trip-summary-view">
     <section class="trip-summary-grid">
@@ -162,6 +167,17 @@ function renderSummary(trip, leads) {
       <header><div><span class="section-kicker">Control de reserves</span><h2>Viatgeres confirmades</h2></div><span>${bookings.length} reserves · ${totalDuis} DUIs</span></header>
       <div class="trip-summary-reservations__scroll"><table><thead><tr><th>Nom i cognoms</th><th>DUI</th><th>Total reserva</th><th>Pagat</th><th>Pendent</th></tr></thead><tbody>${reservationRows}</tbody><tfoot><tr><td colspan="2">Totals del viatge</td><td>${formatCurrency(totalPaid + totalPending)}</td><td>${formatCurrency(totalPaid)}</td><td>${formatCurrency(totalPending)}</td></tr></tfoot></table></div>
     </section>
+    <section class="trip-summary-reservations trip-summary-suppliers">
+      <header><div><span class="section-kicker">Control de despeses</span><h2>Pagaments a proveïdors</h2></div><button class="secondary-button" type="button" data-trip-tab="suppliers">Gestionar pagaments</button></header>
+      <div class="trip-summary-reservations__scroll"><table><thead><tr><th>Proveïdor</th><th>Concepte</th><th>Data</th><th>Forma de pagament</th><th>Import pagat</th></tr></thead><tbody>${supplierRows}</tbody><tfoot><tr><td colspan="4">Total pagat a proveïdors</td><td>${formatCurrency(totalSupplierPaid)}</td></tr></tfoot></table></div>
+    </section>
+    <section class="trip-profit-summary">
+      <article><span>Cobrat a viatgeres</span><strong>${formatCurrency(totalPaid)}</strong></article>
+      <span class="trip-profit-summary__operator">−</span>
+      <article><span>Pagat a proveïdors</span><strong>${formatCurrency(totalSupplierPaid)}</strong></article>
+      <span class="trip-profit-summary__operator">=</span>
+      <article class="trip-profit-summary__result ${currentProfit < 0 ? "is-negative" : ""}"><span>Benefici actual</span><strong>${formatCurrency(currentProfit)}</strong><small>Segons cobraments i pagaments registrats</small></article>
+    </section>
     <section class="trip-quick-access">
       <button type="button" data-trip-tab="leads"><strong>Gestionar leads</strong><span>${active.length} interessades actives →</span></button>
       <button type="button" data-trip-tab="bookings"><strong>Veure reserves</strong><span>${bookings.length} viatgeres confirmades →</span></button>
@@ -184,6 +200,40 @@ function renderBookingsView(leads) {
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
+}
+
+function getSupplierPayments(trip) {
+  return (Array.isArray(trip.supplierPayments) ? trip.supplierPayments : [])
+    .map((payment) => ({ ...payment, amount: Number(payment.amount) || 0 }))
+    .sort((a, b) => String(b.paymentDate || "").localeCompare(String(a.paymentDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+function paymentMethodLabel(method) {
+  return { TRANSFER: "Transferència", CARD: "Targeta", CASH: "Efectiu", DIRECT_DEBIT: "Domiciliació", OTHER: "Altres" }[method] || "Altres";
+}
+
+function renderSuppliersView(trip, message = "", editingId = "") {
+  const payments = getSupplierPayments(trip);
+  const editing = payments.find((payment) => payment.id === editingId);
+  const total = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const rows = payments.length ? payments.map((payment) => `<tr><td><strong>${escapeHtml(payment.supplierName)}</strong></td><td>${escapeHtml(payment.concept)}</td><td>${formatDate(`${payment.paymentDate}T12:00:00`)}</td><td>${escapeHtml(paymentMethodLabel(payment.paymentMethod))}</td><td>${escapeHtml(payment.reference || "—")}</td><td><strong>${formatCurrency(payment.amount)}</strong></td><td><div class="trip-supplier-actions"><button type="button" data-edit-supplier-payment="${payment.id}">Editar</button><button class="is-danger" type="button" data-delete-supplier-payment="${payment.id}">Eliminar</button></div></td></tr>`).join("") : `<tr><td colspan="7" class="trip-summary-reservations__empty">Encara no hi ha pagaments registrats.</td></tr>`;
+  return `<section class="trip-suppliers-view">
+    <section class="trip-supplier-form-card">
+      <header><div><span class="section-kicker">Tresoreria del viatge</span><h2>${editing ? "Editar pagament" : "Nou pagament a proveïdor"}</h2><p>Registra només imports que ja s'han pagat efectivament.</p></div><aside><span>Total pagat</span><strong>${formatCurrency(total)}</strong></aside></header>
+      <form id="tripSupplierPaymentForm" data-trip-id="${trip.id}" data-payment-id="${editing?.id || ""}">
+        <div class="trip-supplier-form-grid">
+          <label class="form-field"><span>Proveïdor</span><input name="supplierName" maxlength="160" required value="${escapeHtml(editing?.supplierName || "")}" placeholder="Nom del proveïdor"></label>
+          <label class="form-field"><span>Concepte</span><input name="concept" maxlength="180" required value="${escapeHtml(editing?.concept || "")}" placeholder="Hotel, vols, assegurança..."></label>
+          <label class="form-field"><span>Data de pagament</span><input name="paymentDate" type="date" required value="${editing?.paymentDate || new Date().toISOString().slice(0, 10)}"></label>
+          <label class="form-field"><span>Import pagat</span><input name="amount" type="number" min="0.01" max="1000000" step="0.01" required value="${editing?.amount || ""}" placeholder="0,00"></label>
+          <label class="form-field"><span>Forma de pagament</span><select name="paymentMethod"><option value="TRANSFER" ${editing?.paymentMethod === "TRANSFER" ? "selected" : ""}>Transferència</option><option value="CARD" ${editing?.paymentMethod === "CARD" ? "selected" : ""}>Targeta</option><option value="DIRECT_DEBIT" ${editing?.paymentMethod === "DIRECT_DEBIT" ? "selected" : ""}>Domiciliació</option><option value="CASH" ${editing?.paymentMethod === "CASH" ? "selected" : ""}>Efectiu</option><option value="OTHER" ${editing?.paymentMethod === "OTHER" ? "selected" : ""}>Altres</option></select></label>
+          <label class="form-field"><span>Referència o factura</span><input name="reference" maxlength="180" value="${escapeHtml(editing?.reference || "")}" placeholder="Opcional"></label>
+        </div>
+        <div class="trip-supplier-form-actions">${editing ? '<button class="secondary-button" type="button" data-cancel-supplier-edit>Cancel·lar</button>' : ""}<p class="quick-lead-form__message ${message ? "is-success" : ""}" id="tripSupplierPaymentMessage">${escapeHtml(message)}</p><button class="primary-button primary-button--compact" type="submit">${editing ? "Guardar canvis" : "Registrar pagament"}</button></div>
+      </form>
+    </section>
+    <section class="trip-summary-reservations trip-supplier-payments-table"><header><div><span class="section-kicker">Historial</span><h2>Pagaments registrats</h2></div><span>${payments.length} moviments</span></header><div class="trip-summary-reservations__scroll"><table><thead><tr><th>Proveïdor</th><th>Concepte</th><th>Data</th><th>Forma</th><th>Referència</th><th>Import</th><th></th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="5">Total pagat a proveïdors</td><td>${formatCurrency(total)}</td><td></td></tr></tfoot></table></div></section>
+  </section>`;
 }
 
 function getPriceConcepts(trip) {
@@ -260,6 +310,7 @@ function renderAnalyticsView(leads) {
 function renderActiveTab(trip, leads, message = "") {
   if (currentTripTab === "leads") return renderLeadsView(leads);
   if (currentTripTab === "bookings") return renderBookingsView(leads);
+  if (currentTripTab === "suppliers") return renderSuppliersView(trip, message);
   if (currentTripTab === "pricing") return renderPricingView(trip, message);
   if (currentTripTab === "operations") return renderOperationsView(trip, message);
   if (currentTripTab === "analytics") return renderAnalyticsView(leads);
@@ -297,6 +348,26 @@ export async function showLeadsForTrip(tripId) {
 }
 
 document.addEventListener("click", (event) => {
+  const editSupplierPayment = event.target.closest?.("[data-edit-supplier-payment]");
+  if (editSupplierPayment && currentTrip) {
+    root().querySelector(".trip-detail-content").innerHTML = renderSuppliersView(currentTrip, "", editSupplierPayment.dataset.editSupplierPayment);
+    return;
+  }
+  const cancelSupplierEdit = event.target.closest?.("[data-cancel-supplier-edit]");
+  if (cancelSupplierEdit && currentTrip) {
+    root().querySelector(".trip-detail-content").innerHTML = renderSuppliersView(currentTrip);
+    return;
+  }
+  const deleteSupplierPayment = event.target.closest?.("[data-delete-supplier-payment]");
+  if (deleteSupplierPayment && currentTrip) {
+    if (!window.confirm("Vols eliminar aquest pagament a proveïdor?")) return;
+    const button = deleteSupplierPayment;
+    button.disabled = true;
+    updateTripSupplierPayments(currentTrip.id, getSupplierPayments(currentTrip).filter((payment) => payment.id !== button.dataset.deleteSupplierPayment))
+      .then((updated) => { currentTrip = { ...currentTrip, ...updated }; root().innerHTML = renderTripDetail(currentTrip, currentTripLeads, "Pagament eliminat correctament."); })
+      .catch((error) => { button.disabled = false; window.alert(getTripErrorMessage(error)); });
+    return;
+  }
   const addButton = event.target.closest?.("[data-price-add]");
   if (addButton && currentTrip) {
     const list = addButton.closest("form")?.querySelector("[data-price-list]");
@@ -356,6 +427,29 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("submit", async (event) => {
   const form = event.target;
+  if (form.id === "tripSupplierPaymentForm") {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const message = form.querySelector("#tripSupplierPaymentMessage");
+    const data = new FormData(form);
+    const existing = getSupplierPayments(currentTrip);
+    const current = existing.find((payment) => payment.id === form.dataset.paymentId);
+    const payment = { id: current?.id || `supplier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, supplierName: data.get("supplierName"), concept: data.get("concept"), paymentDate: data.get("paymentDate"), amount: data.get("amount"), paymentMethod: data.get("paymentMethod"), reference: data.get("reference"), createdAt: current?.createdAt };
+    const payments = current ? existing.map((item) => item.id === current.id ? payment : item) : [...existing, payment];
+    submit.disabled = true;
+    message.className = "quick-lead-form__message";
+    message.textContent = "Guardant...";
+    try {
+      const updated = await updateTripSupplierPayments(form.dataset.tripId, payments);
+      currentTrip = { ...currentTrip, ...updated };
+      root().innerHTML = renderTripDetail(currentTrip, currentTripLeads, current ? "Pagament actualitzat correctament." : "Pagament registrat correctament.");
+    } catch (error) {
+      submit.disabled = false;
+      message.classList.add("is-error");
+      message.textContent = getTripErrorMessage(error);
+    }
+    return;
+  }
   if (form.id === "tripPricingForm") {
     event.preventDefault();
     const submit = form.querySelector('button[type="submit"]');

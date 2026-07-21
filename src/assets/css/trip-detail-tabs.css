@@ -140,6 +140,48 @@
 .trip-summary-dui { display: inline-flex; min-width: 42px; justify-content: center; padding: 5px 9px; border-radius: var(--radius-pill); background: var(--color-surface-soft); color: var(--color-text-muted); font-weight: 800; }
 .trip-summary-dui.is-dui { background: var(--color-brand-050); color: var(--color-brand-900); }
 
+.trip-summary-suppliers > header button { flex: 0 0 auto; }
+.trip-summary-suppliers td:nth-child(2),
+.trip-summary-suppliers th:nth-child(2) { text-align: left; }
+
+.trip-profit-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1.15fr);
+  align-items: stretch;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid rgba(38, 76, 62, .14);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, rgba(38, 76, 62, .035), rgba(218, 170, 134, .09));
+}
+.trip-profit-summary article { display: grid; align-content: center; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--color-white); }
+.trip-profit-summary article span { color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 700; }
+.trip-profit-summary article strong { color: var(--color-brand-900); font-size: clamp(1.35rem, 3vw, 2rem); }
+.trip-profit-summary article small { color: var(--color-text-muted); }
+.trip-profit-summary__operator { align-self: center; color: var(--color-text-muted); font-size: 1.5rem; font-weight: 800; }
+.trip-profit-summary__result { border: 1px solid rgba(38, 76, 62, .16); background: var(--color-brand-050) !important; }
+.trip-profit-summary__result.is-negative { border-color: rgba(157, 62, 62, .2); background: #fff4f2 !important; }
+.trip-profit-summary__result.is-negative strong { color: #9d3e3e; }
+
+.trip-suppliers-view { display: grid; gap: var(--space-5); }
+.trip-supplier-form-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-white); box-shadow: var(--shadow-sm); }
+.trip-supplier-form-card > header { display: flex; justify-content: space-between; gap: var(--space-5); padding: var(--space-6); border-bottom: 1px solid var(--color-border); }
+.trip-supplier-form-card h2 { margin: var(--space-1) 0 var(--space-2); }
+.trip-supplier-form-card header p { margin: 0; color: var(--color-text-secondary); }
+.trip-supplier-form-card header aside { display: grid; align-content: center; gap: var(--space-1); min-width: 180px; padding: var(--space-4); border-radius: var(--radius-lg); background: var(--color-brand-050); text-align: right; }
+.trip-supplier-form-card header aside span { color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 700; }
+.trip-supplier-form-card header aside strong { color: var(--color-brand-900); font-size: 1.6rem; }
+.trip-supplier-form-card form { padding: var(--space-6); }
+.trip-supplier-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.trip-supplier-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-5); }
+.trip-supplier-form-actions p { margin: 0 auto 0 0; }
+.trip-supplier-payments-table table { min-width: 980px; }
+.trip-supplier-payments-table th:nth-child(2),
+.trip-supplier-payments-table td:nth-child(2) { text-align: left; }
+.trip-supplier-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.trip-supplier-actions button { padding: 7px 10px; border: 1px solid var(--color-border) !important; border-radius: var(--radius-sm); background: var(--color-white) !important; color: var(--color-brand-900); font-size: var(--font-size-xs); }
+.trip-supplier-actions button.is-danger { color: #9d3e3e; }
+
 .trip-tour-leader-dui {
   display: flex;
   align-items: center;
@@ -539,6 +581,13 @@
   .trip-analytics-grid { grid-template-columns: 1fr; }
   .trip-overview-card dl { padding-top: 0; }
   .trip-summary-reservations > header { align-items: flex-start; flex-direction: column; padding: var(--space-5); }
+  .trip-profit-summary { grid-template-columns: 1fr; }
+  .trip-profit-summary__operator { justify-self: center; transform: rotate(90deg); }
+  .trip-supplier-form-card > header { flex-direction: column; }
+  .trip-supplier-form-card header aside { text-align: left; }
+  .trip-supplier-form-grid { grid-template-columns: 1fr; }
+  .trip-supplier-form-actions { align-items: stretch; flex-direction: column; }
+  .trip-supplier-form-actions p { margin: 0; }
 }
 
 @media (max-width: 560px) {

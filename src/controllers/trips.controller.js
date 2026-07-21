@@ -1,5 +1,5 @@
 import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, TRIP_PROCESS_STEPS, updateTripDates } from "../services/trip.service.js";
-import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260721-2";
+import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260721-3";
 import { getConfirmedBookings } from "../services/lead.service.js";
 import { isBookedForTrip } from "../services/trip-interest.model.js";
 import { getClients } from "../services/client.service.js";

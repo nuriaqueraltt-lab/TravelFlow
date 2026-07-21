@@ -296,6 +296,49 @@ export async function updateTripOperations(tripId, { tourLeaderName = "", tourLe
   return { tourLeaderName: update.tourLeaderName, tourLeaderDui: update.tourLeaderDui, groupStatus, processChecklist: checklist };
 }
 
+export async function updateTripSupplierPayments(tripId, supplierPayments = []) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (!tripId) throw new Error("TRIP_REQUIRED");
+  if (!Array.isArray(supplierPayments) || supplierPayments.length > 200) throw new Error("SUPPLIER_PAYMENTS_INVALID");
+
+  const ids = new Set();
+  const paymentMethods = new Set(["TRANSFER", "CARD", "CASH", "DIRECT_DEBIT", "OTHER"]);
+  const normalizedPayments = supplierPayments.map((payment) => {
+    const id = String(payment.id || "").trim();
+    const supplierName = String(payment.supplierName || "").trim();
+    const concept = String(payment.concept || "").trim();
+    const paymentDate = String(payment.paymentDate || "").trim();
+    const paymentMethod = String(payment.paymentMethod || "OTHER").trim();
+    const reference = String(payment.reference || "").trim();
+    const amount = Number(payment.amount);
+    const parsedDate = new Date(`${paymentDate}T12:00:00`);
+    if (!id || ids.has(id) || !supplierName || supplierName.length > 160 || !concept || concept.length > 180 || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || Number.isNaN(parsedDate.getTime()) || !paymentMethods.has(paymentMethod) || !Number.isFinite(amount) || amount <= 0 || amount > 1000000 || reference.length > 180) {
+      throw new Error("SUPPLIER_PAYMENTS_INVALID");
+    }
+    ids.add(id);
+    return {
+      id,
+      supplierName,
+      concept,
+      paymentDate,
+      amount: Math.round(amount * 100) / 100,
+      paymentMethod,
+      reference,
+      createdAt: payment.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  const update = { supplierPayments: normalizedPayments, updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
+  await updateDoc(doc(db, "trips", tripId), update);
+  if (tripsCache) {
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, supplierPayments: normalizedPayments } : trip);
+    tripsCacheAt = Date.now();
+  }
+  return { supplierPayments: normalizedPayments };
+}
+
 export function getTripErrorMessage(error) {
   const messages = {
     AUTH_REQUIRED: "La sessió ha caducat. Torna a iniciar sessió.",
@@ -309,6 +352,7 @@ export function getTripErrorMessage(error) {
     TRIP_REQUIRED: "No s'ha pogut identificar el viatge.",
     TRIP_GROUP_STATUS_INVALID: "Selecciona un estat de grup vàlid.",
     TRIP_PRICING_INVALID: "Revisa els conceptes: cal indicar un nom i un import vàlid a cada línia.",
+    SUPPLIER_PAYMENTS_INVALID: "Revisa el pagament: cal indicar proveïdor, concepte, data i un import superior a zero.",
     "permission-denied": "No tens permís per gestionar aquestes etiquetes de viatge."
   };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació amb el viatge.";
