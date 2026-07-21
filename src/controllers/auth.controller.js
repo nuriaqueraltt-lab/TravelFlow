@@ -10,7 +10,7 @@ import {
   getProfileInitials,
   getRoleLabel,
   loadCurrentUserProfile
-} from "../services/user-profile.service.js";
+} from "../services/user-profile.service.js?v=20260721-2";
 import { showAppShell } from "../app.js?v=20260721-2";
 
 let restoringSession = false;
@@ -150,7 +150,8 @@ async function authenticateAndLoadProfile(user, elements) {
       loading: false,
       error: getProfileErrorMessage(error)
     });
-    // Session cleanup must never keep the login screen blocked.
+    // Tancar la sessió és una neteja secundària: mai ha de mantenir
+    // bloquejada la pantalla si Firebase o Safari deixen la petició pendent.
     void logout().catch(() => {});
   }
 }
