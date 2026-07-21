@@ -15,17 +15,6 @@ export const USER_ROLES = Object.freeze({
 const ADMIN_EMAILS = new Set(["nuria.queraltt@gmail.com"]);
 let currentProfile = null;
 
-function getPrimaryAdminProfile(user) {
-  if (!ADMIN_EMAILS.has(String(user?.email || "").toLowerCase())) return null;
-
-  return normalizeProfile(user, {
-    displayName: "Núria Queralt",
-    email: user.email || "",
-    role: USER_ROLES.ADMIN,
-    active: true
-  });
-}
-
 function normalizeProfile(user, data = {}) {
   const displayName = data.displayName?.trim() || user.displayName?.trim() || user.email?.split("@")[0] || "Usuària";
   const role = Object.values(USER_ROLES).includes(data.role) ? data.role : null;
@@ -55,15 +44,6 @@ async function createInitialAdminProfile(user) {
 
 export async function loadCurrentUserProfile(user) {
   if (!user) throw new Error("AUTH_REQUIRED");
-
-  // Firestore ja autoritza aquest compte com a administradora principal a
-  // partir del correu verificat d'Authentication. No fem dependre l'accés
-  // d'una lectura redundant de users/{uid}.
-  const primaryAdminProfile = getPrimaryAdminProfile(user);
-  if (primaryAdminProfile) {
-    currentProfile = primaryAdminProfile;
-    return currentProfile;
-  }
 
   const reference = doc(db, "users", user.uid);
   const snapshot = await getDoc(reference);
@@ -111,7 +91,6 @@ export function getProfileErrorMessage(error) {
     PROFILE_NOT_CONFIGURED: "Aquest usuari encara no té accés autoritzat a TravelFlow.",
     PROFILE_DISABLED: "Aquest accés està desactivat.",
     PROFILE_ROLE_INVALID: "El perfil no té un rol vàlid. Contacta amb l’administració.",
-    PROFILE_LOAD_TIMEOUT: "Firebase està tardant massa a comprovar l’accés. Torna-ho a provar.",
     "permission-denied": "No s’ha pogut comprovar el perfil d’accés."
   };
 
