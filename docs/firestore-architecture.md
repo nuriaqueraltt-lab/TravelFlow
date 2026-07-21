@@ -166,11 +166,23 @@ Catàleg mínim de viatges per relacionar interessos.
   imageUrl: "",
   capacity: 12,
   availablePlaces: null,
+  priceConcepts: [
+    {
+      id: "land-services",
+      name: "Serveis terrestres",
+      amount: 2300,
+      application: "REQUIRED", // REQUIRED | OPTIONAL | INFORMATIONAL
+      priceStatus: "FINAL", // FINAL | ESTIMATED
+      order: 0
+    }
+  ],
   active: true,
   createdAt: Timestamp,
   updatedAt: Timestamp
 }
 ```
+
+`priceConcepts` configura el catàleg econòmic del viatge. En una fase posterior, cada reserva guardarà una còpia dels conceptes seleccionats i dels seus imports per conservar el preu contractat encara que el catàleg general canviï.
 
 ### `notifications`
 

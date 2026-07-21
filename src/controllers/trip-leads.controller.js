@@ -1,5 +1,5 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
-import { getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations } from "../services/trip.service.js";
+import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing } from "../services/trip.service.js";
 import { getTripInterestStatus } from "../services/trip-interest.model.js";
 
 let currentTrip = null;
@@ -31,6 +31,7 @@ const TAB_LABELS = {
   summary: "Resum",
   leads: "Leads",
   bookings: "Reserves",
+  pricing: "Preus",
   operations: "Operativa",
   analytics: "Analítica"
 };
@@ -147,6 +148,39 @@ function renderBookingsView(leads) {
   return `<section class="trip-travelers-section"><header><div><span class="section-kicker">Viatgeres confirmades</span><h2>Reserves</h2></div><span>${bookings.length} reserves confirmades</span></header><section class="leads-table-card"><div class="leads-table-head"><span>Viatgera</span><span>Viatges</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div><div>${renderRows(bookings, { bookingsOnly: true })}</div></section></section>`;
 }
 
+function formatCurrency(value) {
+  return new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
+}
+
+function getPriceConcepts(trip) {
+  const concepts = Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS;
+  return concepts.map((concept, index) => ({ ...concept, order: index }));
+}
+
+function renderPriceRow(concept, index, total) {
+  return `<article class="trip-price-row" data-price-row data-price-id="${escapeHtml(concept.id)}">
+    <div class="trip-price-row__order"><button type="button" data-price-move="up" aria-label="Pujar concepte" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-price-move="down" aria-label="Baixar concepte" ${index === total - 1 ? "disabled" : ""}>↓</button></div>
+    <label><span>Concepte</span><input name="conceptName" maxlength="120" required value="${escapeHtml(concept.name)}" placeholder="Nom del concepte"></label>
+    <label><span>Import</span><span class="trip-price-amount"><input name="conceptAmount" type="number" min="0" max="1000000" step="0.01" required value="${Number(concept.amount) || 0}"><i>€</i></span></label>
+    <label><span>Aplicació</span><select name="conceptApplication"><option value="REQUIRED" ${concept.application === "REQUIRED" ? "selected" : ""}>Obligatori</option><option value="OPTIONAL" ${concept.application === "OPTIONAL" ? "selected" : ""}>Opcional</option><option value="INFORMATIONAL" ${concept.application === "INFORMATIONAL" ? "selected" : ""}>Informatiu</option></select></label>
+    <label><span>Preu</span><select name="conceptPriceStatus"><option value="FINAL" ${concept.priceStatus === "FINAL" ? "selected" : ""}>Definitiu</option><option value="ESTIMATED" ${concept.priceStatus === "ESTIMATED" ? "selected" : ""}>Estimat</option></select></label>
+    <button class="trip-price-row__delete" type="button" data-price-delete aria-label="Eliminar ${escapeHtml(concept.name)}">Eliminar</button>
+  </article>`;
+}
+
+function renderPricingView(trip, message = "") {
+  const concepts = getPriceConcepts(trip);
+  const requiredTotal = concepts.filter((concept) => concept.application === "REQUIRED").reduce((total, concept) => total + (Number(concept.amount) || 0), 0);
+  return `<section class="trip-pricing-card">
+    <header><div><span class="section-kicker">Configuració econòmica</span><h2>Conceptes i preus</h2><p>Defineix les línies que després es podran assignar a cada reserva.</p></div><aside><span>Base obligatòria actual</span><strong data-price-required-total>${formatCurrency(requiredTotal)}</strong></aside></header>
+    <form id="tripPricingForm" data-trip-id="${trip.id}">
+      <div class="trip-pricing-head"><span>Ordre</span><span>Concepte</span><span>Import</span><span>Aplicació</span><span>Preu</span><span></span></div>
+      <div class="trip-price-list" data-price-list>${concepts.map((concept, index) => renderPriceRow(concept, index, concepts.length)).join("")}</div>
+      <div class="trip-pricing-actions"><button class="secondary-button" type="button" data-price-add>+ Afegir concepte</button><p class="quick-lead-form__message ${message ? "is-success" : ""}" id="tripPricingMessage">${escapeHtml(message)}</p><button class="primary-button primary-button--compact" type="submit">Guardar preus</button></div>
+    </form>
+  </section>`;
+}
+
 function renderOperationsView(trip, message = "") {
   const completed = TRIP_PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
   return `<section class="trip-operations-card">
@@ -185,6 +219,7 @@ function renderAnalyticsView(leads) {
 function renderActiveTab(trip, leads, message = "") {
   if (currentTripTab === "leads") return renderLeadsView(leads);
   if (currentTripTab === "bookings") return renderBookingsView(leads);
+  if (currentTripTab === "pricing") return renderPricingView(trip, message);
   if (currentTripTab === "operations") return renderOperationsView(trip, message);
   if (currentTripTab === "analytics") return renderAnalyticsView(leads);
   return renderSummary(trip, leads);
@@ -220,10 +255,56 @@ export async function showLeadsForTrip(tripId) {
 }
 
 document.addEventListener("click", (event) => {
+  const addButton = event.target.closest?.("[data-price-add]");
+  if (addButton && currentTrip) {
+    const list = addButton.closest("form")?.querySelector("[data-price-list]");
+    if (!list) return;
+    const id = `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    list.insertAdjacentHTML("beforeend", renderPriceRow({ id, name: "", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" }, list.children.length, list.children.length + 1));
+    refreshPriceRows(list);
+    list.lastElementChild?.querySelector('input[name="conceptName"]')?.focus();
+    return;
+  }
+  const deleteButton = event.target.closest?.("[data-price-delete]");
+  if (deleteButton) {
+    const list = deleteButton.closest("[data-price-list]");
+    deleteButton.closest("[data-price-row]")?.remove();
+    refreshPriceRows(list);
+    return;
+  }
+  const moveButton = event.target.closest?.("[data-price-move]");
+  if (moveButton) {
+    const row = moveButton.closest("[data-price-row]");
+    const list = row?.parentElement;
+    if (moveButton.dataset.priceMove === "up" && row?.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+    if (moveButton.dataset.priceMove === "down" && row?.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+    refreshPriceRows(list);
+    return;
+  }
   const tabButton = event.target.closest?.("[data-trip-tab]");
   if (!tabButton || !currentTrip) return;
   currentTripTab = tabButton.dataset.tripTab;
   root().innerHTML = renderTripDetail(currentTrip, currentTripLeads);
+});
+
+function refreshPriceRows(list) {
+  if (!list) return;
+  const rows = [...list.querySelectorAll("[data-price-row]")];
+  rows.forEach((row, index) => {
+    row.querySelector('[data-price-move="up"]').disabled = index === 0;
+    row.querySelector('[data-price-move="down"]').disabled = index === rows.length - 1;
+  });
+  const total = rows.reduce((sum, row) => row.querySelector('[name="conceptApplication"]')?.value === "REQUIRED" ? sum + (Number(row.querySelector('[name="conceptAmount"]')?.value) || 0) : sum, 0);
+  const output = list.closest("form")?.previousElementSibling?.querySelector("[data-price-required-total]");
+  if (output) output.textContent = formatCurrency(total);
+}
+
+document.addEventListener("input", (event) => {
+  if (event.target.closest?.("#tripPricingForm")) refreshPriceRows(event.target.closest("form").querySelector("[data-price-list]"));
+});
+
+document.addEventListener("change", (event) => {
+  if (event.target.closest?.("#tripPricingForm")) refreshPriceRows(event.target.closest("form").querySelector("[data-price-list]"));
 });
 
 document.addEventListener("change", (event) => {
@@ -233,6 +314,31 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("submit", async (event) => {
   const form = event.target;
+  if (form.id === "tripPricingForm") {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const message = form.querySelector("#tripPricingMessage");
+    const priceConcepts = [...form.querySelectorAll("[data-price-row]")].map((row) => ({
+      id: row.dataset.priceId,
+      name: row.querySelector('[name="conceptName"]').value,
+      amount: row.querySelector('[name="conceptAmount"]').value,
+      application: row.querySelector('[name="conceptApplication"]').value,
+      priceStatus: row.querySelector('[name="conceptPriceStatus"]').value
+    }));
+    submit.disabled = true;
+    message.className = "quick-lead-form__message";
+    message.textContent = "Guardant...";
+    try {
+      const updated = await updateTripPricing(form.dataset.tripId, priceConcepts);
+      currentTrip = { ...currentTrip, ...updated };
+      root().innerHTML = renderTripDetail(currentTrip, currentTripLeads, "Preus guardats correctament.");
+    } catch (error) {
+      submit.disabled = false;
+      message.classList.add("is-error");
+      message.textContent = getTripErrorMessage(error);
+    }
+    return;
+  }
   if (form.id !== "tripOperationsForm") return;
   event.preventDefault();
   const submit = form.querySelector('button[type="submit"]');

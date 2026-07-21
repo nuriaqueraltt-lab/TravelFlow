@@ -29,7 +29,18 @@ export const TRIP_PROCESS_STEPS = [
   ["finalPaymentConfirmed", "Últim pagament confirmat"], ["travelerInvoicesCreated", "Factures de viatgeres fetes"],
   ["supplierInvoicesCorrect", "Factures de proveïdors correctes"]
 ];
+export const DEFAULT_TRIP_PRICE_CONCEPTS = [
+  { id: "land-services", name: "Serveis terrestres", amount: 0, application: "REQUIRED", priceStatus: "FINAL" },
+  { id: "travel-insurance", name: "Assegurança Intermundial", amount: 0, application: "REQUIRED", priceStatus: "FINAL" },
+  { id: "insurance-over-70", name: "Suplement assegurança 70 anys o més", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" },
+  { id: "international-flights", name: "Vols internacionals", amount: 0, application: "OPTIONAL", priceStatus: "ESTIMATED" },
+  { id: "domestic-flights", name: "Vols interns", amount: 0, application: "OPTIONAL", priceStatus: "ESTIMATED" },
+  { id: "shared-double-room", name: "Habitació doble compartida", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" },
+  { id: "single-room-supplement", name: "Suplement habitació individual", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" }
+];
 const TRIP_GROUP_STATUSES = ["AVAILABLE", "CONFIRMED", "FULL"];
+const TRIP_PRICE_APPLICATIONS = ["REQUIRED", "OPTIONAL", "INFORMATIONAL"];
+const TRIP_PRICE_STATUSES = ["FINAL", "ESTIMATED"];
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function slugify(value = "") {
@@ -134,6 +145,7 @@ export async function createTripTag({ name, startDate = "", endDate = "", closin
     year: inferredYear,
     datesPending,
     active: true,
+    priceConcepts: DEFAULT_TRIP_PRICE_CONCEPTS.map((concept) => ({ ...concept })),
     createdBy: currentUser.uid,
     updatedBy: currentUser.uid,
     createdAt: serverTimestamp(),
@@ -142,6 +154,42 @@ export async function createTripTag({ name, startDate = "", endDate = "", closin
   const reference = await addDoc(collection(db, "trips"), trip);
   invalidateTripsCache();
   return { id: reference.id, ...trip };
+}
+
+export async function updateTripPricing(tripId, priceConcepts = []) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (!tripId) throw new Error("TRIP_REQUIRED");
+  if (!Array.isArray(priceConcepts) || priceConcepts.length > 100) throw new Error("TRIP_PRICING_INVALID");
+
+  const ids = new Set();
+  const normalizedConcepts = priceConcepts.map((concept, index) => {
+    const id = String(concept.id || "").trim();
+    const name = String(concept.name || "").trim();
+    const amount = Number(concept.amount);
+    const application = String(concept.application || "OPTIONAL");
+    const priceStatus = String(concept.priceStatus || "FINAL");
+    if (!id || ids.has(id) || !name || name.length > 120 || !Number.isFinite(amount) || amount < 0 || amount > 1000000) {
+      throw new Error("TRIP_PRICING_INVALID");
+    }
+    if (!TRIP_PRICE_APPLICATIONS.includes(application) || !TRIP_PRICE_STATUSES.includes(priceStatus)) {
+      throw new Error("TRIP_PRICING_INVALID");
+    }
+    ids.add(id);
+    return { id, name, amount: Math.round(amount * 100) / 100, application, priceStatus, order: index };
+  });
+
+  const update = {
+    priceConcepts: normalizedConcepts,
+    updatedBy: currentUser.uid,
+    updatedAt: serverTimestamp()
+  };
+  await updateDoc(doc(db, "trips", tripId), update);
+  if (tripsCache) {
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, priceConcepts: normalizedConcepts } : trip);
+    tripsCacheAt = Date.now();
+  }
+  return { priceConcepts: normalizedConcepts };
 }
 
 export async function updateTripDates(tripId, { startDate, endDate, closingDate = "", imageUrl = "" }) {
@@ -209,6 +257,7 @@ export function getTripErrorMessage(error) {
     TRIP_CLOSING_ORDER: "La data de tancament no pot ser posterior a la sortida.",
     TRIP_REQUIRED: "No s'ha pogut identificar el viatge.",
     TRIP_GROUP_STATUS_INVALID: "Selecciona un estat de grup vàlid.",
+    TRIP_PRICING_INVALID: "Revisa els conceptes: cal indicar un nom i un import vàlid a cada línia.",
     "permission-denied": "No tens permís per gestionar aquestes etiquetes de viatge."
   };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació amb el viatge.";
