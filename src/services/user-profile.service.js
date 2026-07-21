@@ -91,6 +91,7 @@ export function getProfileErrorMessage(error) {
     PROFILE_NOT_CONFIGURED: "Aquest usuari encara no té accés autoritzat a TravelFlow.",
     PROFILE_DISABLED: "Aquest accés està desactivat.",
     PROFILE_ROLE_INVALID: "El perfil no té un rol vàlid. Contacta amb l’administració.",
+    PROFILE_LOAD_TIMEOUT: "Firebase està tardant massa a comprovar l’accés. Torna-ho a provar.",
     "permission-denied": "No s’ha pogut comprovar el perfil d’accés."
   };
 
