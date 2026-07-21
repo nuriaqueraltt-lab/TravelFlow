@@ -14,6 +14,7 @@ function phoneKey(value) { return clean(value).replace(/\D/g, ""); }
 function dniKey(value) { return clean(value).toUpperCase().replace(/[\s.-]/g, ""); }
 
 export function invalidateClientsCache() { clientsCache = null; }
+window.addEventListener("travelflow:clients-updated", invalidateClientsCache);
 
 export async function getClients({ force = false } = {}) {
   if (!force && clientsCache) return clientsCache;
@@ -46,6 +47,7 @@ export async function ensureClientForBooking(lead, booking) {
   const existing = await findClientMatch(lead);
   const clientRef = existing ? doc(db, "clients", existing.id) : doc(collection(db, "clients"));
   const reservation = {
+    ...(existing?.reservations?.[booking.tripId] || {}),
     tripId: booking.tripId,
     tripName: booking.tripName,
     leadId: lead.id,
@@ -53,6 +55,7 @@ export async function ensureClientForBooking(lead, booking) {
     bookedAt: booking.bookedAt || serverTimestamp(),
     priceConcepts: booking.priceConcepts,
     total: booking.total,
+    pricingMode: booking.pricingMode || "TRIP",
     dui: Boolean(booking.dui),
     updatedAt: serverTimestamp()
   };
@@ -123,7 +126,15 @@ export async function updateClientReservation(clientId, tripId, input) {
   const current = client?.reservations?.[tripId];
   if (!client || !current?.leadId) throw new Error("RESERVATION_NOT_FOUND");
 
-  const priceConcepts = normalizeReservationConcepts(input.priceConcepts);
+  const pricingMode = input.pricingMode === "TRIP" ? "TRIP" : "CUSTOM";
+  let conceptsInput = input.priceConcepts;
+  if (pricingMode === "TRIP") {
+    const tripSnapshot = await getDoc(doc(db, "trips", tripId));
+    if (!tripSnapshot.exists()) throw new Error("RESERVATION_TRIP_NOT_FOUND");
+    const selectedIds = new Set((input.priceConcepts || []).map((concept) => clean(concept.id)));
+    conceptsInput = (tripSnapshot.data().priceConcepts || []).filter((concept) => concept.application === "REQUIRED" || selectedIds.has(clean(concept.id)));
+  }
+  const priceConcepts = normalizeReservationConcepts(conceptsInput);
   const total = Math.round(priceConcepts.reduce((sum, concept) => concept.application === "INFORMATIONAL" ? sum : sum + concept.amount, 0) * 100) / 100;
   const payments = normalizePayments(input.payments);
   const totalPaid = Math.round(payments.reduce((sum, payment) => sum + payment.amount, 0) * 100) / 100;
@@ -143,6 +154,7 @@ export async function updateClientReservation(clientId, tripId, input) {
     roommate: clean(input.roommate),
     departureCity: clean(input.departureCity),
     notes: clean(input.notes),
+    pricingMode,
     priceConcepts,
     total,
     payments,
@@ -157,6 +169,7 @@ export async function updateClientReservation(clientId, tripId, input) {
     roommate: reservation.roommate,
     departureCity: reservation.departureCity,
     bookingNotes: reservation.notes,
+    pricingMode,
     bookingPriceConcepts: priceConcepts,
     bookingTotal: total,
     payments,

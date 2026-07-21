@@ -255,14 +255,15 @@ export async function confirmBooking(lead, { tripId, dui = false, priceConcepts 
   const bookedAt = tripInterests[tripId]?.bookedAt || (lead.bookingTripId === tripId ? lead.bookedAt : null) || serverTimestamp();
   const bookingPriceConcepts = normalizeBookingPriceConcepts(priceConcepts);
   const bookingTotal = Math.round(bookingPriceConcepts.reduce((total, concept) => concept.application === "INFORMATIONAL" ? total : total + concept.amount, 0) * 100) / 100;
-  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.BOOKING_CONFIRMED, bookedAt, dui: Boolean(dui), bookingPriceConcepts, bookingTotal };
+  const pricingMode = tripInterests[tripId]?.pricingMode || (wasBooked ? "CUSTOM" : "TRIP");
+  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.BOOKING_CONFIRMED, bookedAt, dui: Boolean(dui), pricingMode, bookingPriceConcepts, bookingTotal };
   const keepsOtherInterests = hasActiveTripInterests({ ...lead, tripInterests });
   const batch = writeBatch(db);
   if (!wasBooked && !keepsOtherInterests) await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: wasBooked ? ACTIVITY_TYPES.NOTE : ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `${wasBooked ? "Reserva actualitzada" : "Reserva confirmada"} · ${tripName} · DUI: ${dui ? "Sí" : "No"} · Total: ${bookingTotal.toLocaleString("ca-ES", { style: "currency", currency: "EUR" })}.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
   batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt, ...(!wasBooked && !keepsOtherInterests ? { nextActionAt: null, nextActionTitle: "" } : {}), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
-  const clientId = await ensureClientForBooking(lead, { tripId, tripName, bookedAt, dui, priceConcepts: bookingPriceConcepts, total: bookingTotal });
+  const clientId = await ensureClientForBooking(lead, { tripId, tripName, bookedAt, dui, pricingMode, priceConcepts: bookingPriceConcepts, total: bookingTotal });
   await updateDoc(doc(db, "leads", lead.id), { clientId, updatedBy: user.uid, updatedAt: serverTimestamp() });
 }
 

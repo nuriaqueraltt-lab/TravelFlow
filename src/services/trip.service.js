@@ -185,11 +185,61 @@ export async function updateTripPricing(tripId, priceConcepts = []) {
     updatedAt: serverTimestamp()
   };
   await updateDoc(doc(db, "trips", tripId), update);
+  await syncLinkedReservationPrices(tripId, normalizedConcepts, currentUser.uid);
+  window.dispatchEvent(new CustomEvent("travelflow:clients-updated"));
   if (tripsCache) {
     tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, priceConcepts: normalizedConcepts } : trip);
     tripsCacheAt = Date.now();
   }
   return { priceConcepts: normalizedConcepts };
+}
+
+function linkedConceptsForReservation(reservation, catalogue) {
+  const selectedIds = new Set((reservation.priceConcepts || []).map((concept) => String(concept.id || "")));
+  return catalogue
+    .filter((concept) => concept.application === "REQUIRED" || selectedIds.has(concept.id))
+    .map((concept, order) => ({ ...concept, order }));
+}
+
+function reservationTotal(concepts) {
+  return Math.round(concepts.reduce((sum, concept) => concept.application === "INFORMATIONAL" ? sum : sum + concept.amount, 0) * 100) / 100;
+}
+
+async function syncLinkedReservationPrices(tripId, catalogue, userId) {
+  const [clientsSnapshot, leadsSnapshot] = await Promise.all([
+    getDocs(collection(db, "clients")),
+    getDocs(collection(db, "leads"))
+  ]);
+  const leadChanges = new Map();
+  const writes = [];
+
+  clientsSnapshot.docs.forEach((clientDocument) => {
+    const client = clientDocument.data();
+    const current = client.reservations?.[tripId];
+    if (!current || current.pricingMode !== "TRIP") return;
+    const priceConcepts = linkedConceptsForReservation(current, catalogue);
+    const total = reservationTotal(priceConcepts);
+    const totalPaid = Number(current.totalPaid) || (current.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    const reservation = { ...current, priceConcepts, total, pendingAmount: Math.max(0, Math.round((total - totalPaid) * 100) / 100), updatedAt: new Date().toISOString() };
+    writes.push({ ref: clientDocument.ref, data: { reservations: { ...(client.reservations || {}), [tripId]: reservation }, updatedBy: userId, updatedAt: serverTimestamp() } });
+
+    if (current.leadId) {
+      const leadDocument = leadsSnapshot.docs.find((item) => item.id === current.leadId);
+      if (leadDocument) {
+        const base = leadChanges.get(current.leadId) || leadDocument.data();
+        const tripInterests = { ...(base.tripInterests || {}) };
+        tripInterests[tripId] = { ...(tripInterests[tripId] || {}), pricingMode: "TRIP", bookingPriceConcepts: priceConcepts, bookingTotal: total, totalPaid };
+        leadChanges.set(current.leadId, { ...base, tripInterests });
+      }
+    }
+  });
+
+  leadChanges.forEach((lead, leadId) => writes.push({ ref: doc(db, "leads", leadId), data: { tripInterests: lead.tripInterests, updatedBy: userId, updatedAt: serverTimestamp() } }));
+  for (let index = 0; index < writes.length; index += 400) {
+    const batch = writeBatch(db);
+    writes.slice(index, index + 400).forEach((write) => batch.update(write.ref, write.data));
+    await batch.commit();
+  }
 }
 
 export async function updateTripDates(tripId, { startDate, endDate, closingDate = "", imageUrl = "" }) {
