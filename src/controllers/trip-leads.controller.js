@@ -110,11 +110,29 @@ function renderSummary(trip, leads) {
   const completed = TRIP_PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
   const nextStep = TRIP_PROCESS_STEPS.find(([key]) => trip.processChecklist?.[key] !== true)?.[1] || "Checklist complet";
   const conversion = leads.length ? Math.round((bookings.length / leads.length) * 100) : 0;
+  const coordinatorAssigned = Boolean(trip.tourLeaderName?.trim());
+  const bookingDetails = bookings.map((lead) => {
+    const booking = lead.tripInterests?.[trip.id] || {};
+    const total = Number(booking.bookingTotal) || 0;
+    const payments = Array.isArray(booking.payments) ? booking.payments : [];
+    const paymentsTotal = payments.reduce((sum, payment) => sum + (Number(payment?.amount) || 0), 0);
+    const paid = Math.max(0, Math.min(total, Number(booking.totalPaid ?? booking.paidTotal ?? paymentsTotal) || 0));
+    return { lead, booking, total, paid, pending: Math.max(0, total - paid) };
+  });
+  const totalPaid = bookingDetails.reduce((sum, item) => sum + item.paid, 0);
+  const totalPending = bookingDetails.reduce((sum, item) => sum + item.pending, 0);
+  const travelerDuis = bookingDetails.filter((item) => item.booking.dui === true).length;
+  const totalDuis = travelerDuis + (coordinatorAssigned && trip.tourLeaderDui ? 1 : 0);
+  const lastStep = [...TRIP_PROCESS_STEPS].reverse().find(([key]) => trip.processChecklist?.[key] === true)?.[1] || "Encara cap";
+  const reservationRows = bookingDetails.length ? bookingDetails.map(({ lead, booking, total, paid, pending }) => `<tr><td><button type="button" data-lead-id="${lead.id}">${escapeHtml(lead.fullName)}</button></td><td><span class="trip-summary-dui ${booking.dui ? "is-dui" : ""}">${booking.dui ? "Sí" : "No"}</span></td><td>${formatCurrency(total)}</td><td>${formatCurrency(paid)}</td><td><strong>${formatCurrency(pending)}</strong></td></tr>`).join("") : `<tr><td colspan="5" class="trip-summary-reservations__empty">Encara no hi ha reserves confirmades.</td></tr>`;
 
   return `<section class="trip-summary-view">
     <section class="trip-summary-grid">
       <article><span>Leads totals</span><strong>${leads.length}</strong><small>${active.length} encara actius</small></article>
-      <article><span>Reserves confirmades</span><strong>${bookings.length}</strong><small>${conversion}% de conversió</small></article>
+      <article><span>Viatgeres + TL</span><strong>${bookings.length}${coordinatorAssigned ? " + 1" : " + 0"}</strong><small>${coordinatorAssigned ? escapeHtml(trip.tourLeaderName) : "Coordinadora pendent"}</small></article>
+      <article><span>Total DUIs</span><strong>${totalDuis}</strong><small>${travelerDuis} viatgeres${coordinatorAssigned && trip.tourLeaderDui ? " + coordinadora" : ""}</small></article>
+      <article><span>Total pagat</span><strong>${formatCurrency(totalPaid)}</strong><small>${conversion}% de conversió</small></article>
+      <article><span>Total pendent</span><strong>${formatCurrency(totalPending)}</strong><small>${bookings.length} reserves confirmades</small></article>
       <article><span>Leads perduts</span><strong>${lost.length}</strong><small>${leads.length ? Math.round((lost.length / leads.length) * 100) : 0}% del total</small></article>
       <article><span>Operativa completada</span><strong>${completed}/${TRIP_PROCESS_STEPS.length}</strong><small>${escapeHtml(nextStep)}</small></article>
     </section>
@@ -122,14 +140,20 @@ function renderSummary(trip, leads) {
       <div class="trip-overview-card__main">
         <span class="section-kicker">Situació actual</span>
         <h2>${escapeHtml(trip.tourLeaderName || "Coordinadora pendent d’assignar")}</h2>
+        <span class="trip-overview-card__dui">DUI coordinadora: <strong>${coordinatorAssigned ? (trip.tourLeaderDui ? "Sí" : "No") : "Pendent"}</strong></span>
         <p>${escapeHtml({ AVAILABLE: "El viatge encara té places disponibles.", CONFIRMED: "El grup està confirmat.", FULL: "El grup està complet." }[trip.groupStatus || "AVAILABLE"])}</p>
       </div>
       <dl>
         <div><dt>Inici</dt><dd>${formatDate(trip.startDate)}</dd></div>
         <div><dt>Final</dt><dd>${formatDate(trip.endDate)}</dd></div>
         <div><dt>Tancament comercial</dt><dd>${formatDate(trip.closingDate)}</dd></div>
-        <div><dt>Pròxima acció operativa</dt><dd>${escapeHtml(nextStep)}</dd></div>
+        <div><dt>Última acció</dt><dd>${escapeHtml(lastStep)}</dd></div>
+        <div><dt>Pròxima acció</dt><dd>${escapeHtml(nextStep)}</dd></div>
       </dl>
+    </section>
+    <section class="trip-summary-reservations">
+      <header><div><span class="section-kicker">Control de reserves</span><h2>Viatgeres confirmades</h2></div><span>${bookings.length} reserves · ${totalDuis} DUIs</span></header>
+      <div class="trip-summary-reservations__scroll"><table><thead><tr><th>Nom i cognoms</th><th>DUI</th><th>Total reserva</th><th>Pagat</th><th>Pendent</th></tr></thead><tbody>${reservationRows}</tbody><tfoot><tr><td colspan="2">Totals del viatge</td><td>${formatCurrency(totalPaid + totalPending)}</td><td>${formatCurrency(totalPaid)}</td><td>${formatCurrency(totalPending)}</td></tr></tfoot></table></div>
     </section>
     <section class="trip-quick-access">
       <button type="button" data-trip-tab="leads"><strong>Gestionar leads</strong><span>${active.length} interessades actives →</span></button>
@@ -197,7 +221,7 @@ function renderOperationsView(trip, message = "") {
     <header><div><span class="section-kicker">Organització</span><h2>Seguiment operatiu</h2></div><strong>${completed} de ${TRIP_PROCESS_STEPS.length} completats</strong></header>
     <div class="trip-progress"><span style="width:${Math.round((completed / TRIP_PROCESS_STEPS.length) * 100)}%"></span></div>
     <form id="tripOperationsForm" data-trip-id="${trip.id}">
-      <div class="trip-operations-fields"><label class="form-field trip-tour-leader"><span>Tour Leader · Coordinadora del viatge</span><input name="tourLeaderName" type="text" value="${escapeHtml(trip.tourLeaderName || "")}" placeholder="Nom de la coordinadora"></label><label class="form-field trip-group-status"><span>Estat del grup</span><select name="groupStatus"><option value="AVAILABLE" ${(trip.groupStatus || "AVAILABLE") === "AVAILABLE" ? "selected" : ""}>Places disponibles</option><option value="CONFIRMED" ${trip.groupStatus === "CONFIRMED" ? "selected" : ""}>Grup confirmat</option><option value="FULL" ${trip.groupStatus === "FULL" ? "selected" : ""}>Grup complet</option></select></label></div>
+      <div class="trip-operations-fields"><label class="form-field trip-tour-leader"><span>Tour Leader · Coordinadora del viatge</span><input name="tourLeaderName" type="text" value="${escapeHtml(trip.tourLeaderName || "")}" placeholder="Nom de la coordinadora"></label><label class="form-field trip-group-status"><span>Estat del grup</span><select name="groupStatus"><option value="AVAILABLE" ${(trip.groupStatus || "AVAILABLE") === "AVAILABLE" ? "selected" : ""}>Places disponibles</option><option value="CONFIRMED" ${trip.groupStatus === "CONFIRMED" ? "selected" : ""}>Grup confirmat</option><option value="FULL" ${trip.groupStatus === "FULL" ? "selected" : ""}>Grup complet</option></select></label><label class="trip-tour-leader-dui"><input name="tourLeaderDui" type="checkbox" ${trip.tourLeaderDui ? "checked" : ""}><span>La coordinadora porta DUI</span></label></div>
       <fieldset class="trip-process-list"><legend>Checklist del viatge</legend>${renderProcessChecklist(trip)}</fieldset>
       <div class="trip-operations-actions"><p class="quick-lead-form__message ${message ? "is-success" : ""}" id="tripOperationsMessage">${escapeHtml(message)}</p><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></div>
     </form>
@@ -360,6 +384,7 @@ document.addEventListener("submit", async (event) => {
   try {
     const updated = await updateTripOperations(form.dataset.tripId, {
       tourLeaderName: data.get("tourLeaderName") || "",
+      tourLeaderDui: data.has("tourLeaderDui"),
       groupStatus: data.get("groupStatus") || "AVAILABLE",
       processChecklist: Object.fromEntries(TRIP_PROCESS_STEPS.map(([key]) => [key, data.has(key)]))
     });

@@ -224,7 +224,7 @@ export async function updateTripDates(tripId, { startDate, endDate, closingDate 
   return { activated };
 }
 
-export async function updateTripOperations(tripId, { tourLeaderName = "", groupStatus = "AVAILABLE", processChecklist = {} }) {
+export async function updateTripOperations(tripId, { tourLeaderName = "", tourLeaderDui = false, groupStatus = "AVAILABLE", processChecklist = {} }) {
   const currentUser = getCurrentUser();
   if (!currentUser) throw new Error("AUTH_REQUIRED");
   if (!tripId) throw new Error("TRIP_REQUIRED");
@@ -232,6 +232,7 @@ export async function updateTripOperations(tripId, { tourLeaderName = "", groupS
   const checklist = Object.fromEntries(TRIP_PROCESS_STEPS.map(([key]) => [key, processChecklist[key] === true]));
   const update = {
     tourLeaderName: tourLeaderName.trim(),
+    tourLeaderDui: Boolean(tourLeaderDui),
     groupStatus,
     processChecklist: checklist,
     updatedBy: currentUser.uid,
@@ -239,10 +240,10 @@ export async function updateTripOperations(tripId, { tourLeaderName = "", groupS
   };
   await updateDoc(doc(db, "trips", tripId), update);
   if (tripsCache) {
-    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, tourLeaderName: update.tourLeaderName, groupStatus, processChecklist: checklist } : trip);
+    tripsCache = tripsCache.map((trip) => trip.id === tripId ? { ...trip, tourLeaderName: update.tourLeaderName, tourLeaderDui: update.tourLeaderDui, groupStatus, processChecklist: checklist } : trip);
     tripsCacheAt = Date.now();
   }
-  return { tourLeaderName: update.tourLeaderName, groupStatus, processChecklist: checklist };
+  return { tourLeaderName: update.tourLeaderName, tourLeaderDui: update.tourLeaderDui, groupStatus, processChecklist: checklist };
 }
 
 export function getTripErrorMessage(error) {
