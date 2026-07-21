@@ -56,7 +56,10 @@ function sectionFromClick(target) {
 
 document.addEventListener("click", (event) => {
   const section = sectionFromClick(event.target);
-  if (section) setActiveNavigation(section);
+  if (section) {
+    setActiveNavigation(section);
+    if (section === "Clientes") window.dispatchEvent(new CustomEvent("travelflow:open-clients"));
+  }
 }, true);
 
 window.addEventListener("travelflow:navigation", (event) => {
