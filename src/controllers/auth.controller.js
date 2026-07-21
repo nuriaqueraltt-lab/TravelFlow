@@ -14,6 +14,7 @@ import {
 
 let restoringSession = false;
 let logoutInProgress = false;
+let loginInProgress = false;
 
 function getLoginElements() {
   const form = document.querySelector("#loginForm");
@@ -110,18 +111,27 @@ function applyProfileToShell(profile) {
 
 function continueToApp(form, profile) {
   form.dataset.authenticated = "true";
-  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  requestAnimationFrame(() => requestAnimationFrame(() => applyProfileToShell(profile)));
+  window.dispatchEvent(new CustomEvent("travelflow:open-app"));
+  applyProfileToShell(profile);
+}
+
+function withTimeout(promise, timeoutMs = 15000) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error("PROFILE_TIMEOUT")), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
 async function authenticateAndLoadProfile(user, elements) {
   try {
-    const profile = await loadCurrentUserProfile(user);
+    const profile = await withTimeout(loadCurrentUserProfile(user));
     setLoginState(elements);
     continueToApp(elements.form, profile);
   } catch (error) {
     clearCurrentUserProfile();
-    await logout().catch(() => {});
+    logout().catch(() => {});
     setLoginState(elements, {
       loading: false,
       error: getProfileErrorMessage(error)
@@ -144,6 +154,7 @@ async function handleLoginSubmit(event) {
   }
 
   setLoginState(elements, { loading: true });
+  loginInProgress = true;
 
   try {
     const credential = await loginWithEmail(
@@ -157,11 +168,13 @@ async function handleLoginSubmit(event) {
       loading: false,
       error: getAuthErrorMessage(error)
     });
+  } finally {
+    loginInProgress = false;
   }
 }
 
 async function restoreExistingSession(user) {
-  if (!user || restoringSession) return;
+  if (!user || restoringSession || loginInProgress) return;
 
   const elements = getLoginElements();
   const { form, emailInput, passwordInput } = elements;
