@@ -1,9 +1,12 @@
-/* Dashboard and Leads alignment
-   Keeps both main workspaces on the shared visual foundations without changing
+/* Main screens alignment
+   Keeps the primary workspaces on the shared visual foundations without changing
    their content, responsive structure or interaction model. */
 
 .dashboard-view > .page-heading,
-.leads-page > .page-heading {
+.leads-page > .page-heading,
+.trips-hub-page > .page-heading,
+.trips-management-page > .page-heading,
+.user-admin-page > .page-heading {
   min-height: 164px;
   padding: clamp(1.5rem, 3vw, 2rem);
   border-radius: var(--radius-xl);
@@ -14,7 +17,10 @@
 }
 
 .dashboard-view > .page-heading::before,
-.leads-page > .page-heading::before {
+.leads-page > .page-heading::before,
+.trips-hub-page > .page-heading::before,
+.trips-management-page > .page-heading::before,
+.user-admin-page > .page-heading::before {
   inset: 0 auto 0 0;
   width: 5px;
   height: auto;
@@ -22,29 +28,47 @@
 }
 
 .dashboard-view > .page-heading::after,
-.leads-page > .page-heading::after {
+.leads-page > .page-heading::after,
+.trips-hub-page > .page-heading::after,
+.trips-management-page > .page-heading::after,
+.user-admin-page > .page-heading::after {
+  position: absolute;
   right: -78px;
   bottom: -122px;
+  width: 190px;
+  height: 190px;
+  border: 1px solid rgba(75, 112, 93, 0.08);
+  border-radius: 50%;
   border-color: rgba(75, 112, 93, 0.08);
   box-shadow:
     0 0 0 45px rgba(75, 112, 93, 0.028),
     0 0 0 90px rgba(75, 112, 93, 0.016);
+  content: "";
 }
 
 .dashboard-view > .page-heading .section-kicker,
-.leads-page > .page-heading .section-kicker {
+.leads-page > .page-heading .section-kicker,
+.trips-hub-page > .page-heading .section-kicker,
+.trips-management-page > .page-heading .section-kicker,
+.user-admin-page > .page-heading .section-kicker {
   color: var(--color-brand-700);
 }
 
 .dashboard-view > .page-heading h1,
-.leads-page > .page-heading h1 {
+.leads-page > .page-heading h1,
+.trips-hub-page > .page-heading h1,
+.trips-management-page > .page-heading h1,
+.user-admin-page > .page-heading h1 {
   margin: 0 0 var(--space-2);
   color: var(--color-brand-900);
   font-size: clamp(2.15rem, 4vw, 3.35rem);
 }
 
 .dashboard-view > .page-heading p,
-.leads-page > .page-heading p {
+.leads-page > .page-heading p,
+.trips-hub-page > .page-heading p,
+.trips-management-page > .page-heading p,
+.user-admin-page > .page-heading p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-lg);
@@ -64,6 +88,12 @@
   box-shadow: 0 13px 28px rgba(47, 70, 59, 0.23);
 }
 
+.trips-hub-page > .page-heading .secondary-button,
+.user-admin-page > .page-heading .secondary-button {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 7px 18px rgba(47, 70, 59, 0.08);
+}
+
 .dashboard-view .metric-card,
 .dashboard-view .content-card,
 .leads-toolbar,
@@ -72,6 +102,72 @@
   border-radius: var(--radius-xl);
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 10px 28px rgba(47, 70, 59, 0.065);
+}
+
+.trips-hub-summary > div,
+.trips-management-summary > div,
+.trips-management-search,
+.trips-management-card,
+.trips-hub-card,
+.user-admin-create-card,
+.user-admin-list-card {
+  border-color: rgba(47, 70, 59, 0.1);
+  border-radius: var(--radius-xl);
+  background-color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(47, 70, 59, 0.065);
+}
+
+.trips-hub-summary > div,
+.trips-management-summary > div {
+  min-height: 116px;
+  border-radius: var(--radius-lg);
+}
+
+.trips-section-tabs {
+  border-color: rgba(47, 70, 59, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 7px 20px rgba(47, 70, 59, 0.045);
+}
+
+.user-admin-layout {
+  gap: var(--space-6);
+}
+
+.user-admin-create-card,
+.user-admin-list-card {
+  padding: var(--space-6);
+}
+
+.user-admin-create-card > header,
+.user-admin-list-card > header {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid rgba(47, 70, 59, 0.1);
+}
+
+.user-admin-create-card h2,
+.user-admin-list-card h2 {
+  color: var(--color-brand-900);
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.user-admin-row {
+  border-color: rgba(47, 70, 59, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.user-admin-row:hover {
+  border-color: rgba(75, 107, 90, 0.22);
+  box-shadow: 0 9px 22px rgba(47, 70, 59, 0.055);
+  transform: translateY(-1px);
+}
+
+.user-admin-avatar {
+  border-radius: var(--radius-md);
+  background: var(--color-brand-050);
+  color: var(--color-brand-900);
 }
 
 .dashboard-view .metric-card {
@@ -96,18 +192,27 @@
 
 @media (max-width: 760px) {
   .dashboard-view > .page-heading,
-  .leads-page > .page-heading {
+  .leads-page > .page-heading,
+  .trips-hub-page > .page-heading,
+  .trips-management-page > .page-heading,
+  .user-admin-page > .page-heading {
     min-height: 0;
     padding: var(--space-6) var(--space-5);
   }
 
   .dashboard-view > .page-heading h1,
-  .leads-page > .page-heading h1 {
+  .leads-page > .page-heading h1,
+  .trips-hub-page > .page-heading h1,
+  .trips-management-page > .page-heading h1,
+  .user-admin-page > .page-heading h1 {
     font-size: clamp(2rem, 10vw, 2.65rem);
   }
 
   .dashboard-view > .page-heading p,
-  .leads-page > .page-heading p {
+  .leads-page > .page-heading p,
+  .trips-hub-page > .page-heading p,
+  .trips-management-page > .page-heading p,
+  .user-admin-page > .page-heading p {
     font-size: var(--font-size-md);
   }
 
@@ -117,11 +222,27 @@
   .leads-table-card {
     border-radius: var(--radius-lg);
   }
+
+  .trips-hub-summary > div,
+  .trips-management-summary > div,
+  .trips-management-search,
+  .trips-management-card,
+  .trips-hub-card,
+  .user-admin-create-card,
+  .user-admin-list-card {
+    border-radius: var(--radius-lg);
+  }
+
+  .user-admin-create-card,
+  .user-admin-list-card {
+    padding: var(--space-5);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-view .metric-card,
-  .lead-row {
+  .lead-row,
+  .user-admin-row {
     transition: none;
   }
 }
