@@ -6,6 +6,8 @@ import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 
 let clientsCache = null;
+let clientsCacheComplete = false;
+const clientsById = new Map();
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function clean(value) { return String(value || "").trim(); }
@@ -13,7 +15,7 @@ function emailKey(value) { return clean(value).toLowerCase(); }
 function phoneKey(value) { return clean(value).replace(/\D/g, ""); }
 function dniKey(value) { return clean(value).toUpperCase().replace(/[\s.-]/g, ""); }
 
-export function invalidateClientsCache() { clientsCache = null; }
+export function invalidateClientsCache() { clientsCache = null; clientsCacheComplete = false; clientsById.clear(); }
 window.addEventListener("travelflow:clients-updated", invalidateClientsCache);
 
 export async function getClients({ force = false } = {}) {
@@ -21,12 +23,19 @@ export async function getClients({ force = false } = {}) {
   const snapshot = await getDocs(collection(db, "clients"));
   clientsCache = snapshot.docs.map(mapDocument).filter((client) => client.active !== false)
     .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "ca"));
+  clientsById.clear();
+  clientsCache.forEach((client) => clientsById.set(client.id, client));
+  clientsCacheComplete = true;
   return clientsCache;
 }
 
 export async function getClient(clientId) {
+  if (clientsById.has(clientId)) return clientsById.get(clientId);
   const snapshot = await getDoc(doc(db, "clients", clientId));
-  return snapshot.exists() ? mapDocument(snapshot) : null;
+  if (!snapshot.exists()) return null;
+  const client = mapDocument(snapshot);
+  clientsById.set(clientId, client);
+  return client;
 }
 
 async function findOne(field, value) {
@@ -87,10 +96,23 @@ export async function updateClient(clientId, input) {
     superTraveler: Boolean(input.superTraveler), updatedBy: user.uid, updatedAt: serverTimestamp()
   };
   if (!payload.fullName) throw new Error("CLIENT_NAME_REQUIRED");
-  const duplicate = await findClientMatch(payload);
+  const duplicate = clientsCacheComplete
+    ? clientsCache.find((client) => client.id !== clientId && (
+      (payload.dniNormalized && client.dniNormalized === payload.dniNormalized)
+      || (payload.emailNormalized && client.emailNormalized === payload.emailNormalized)
+      || (payload.phoneNormalized && client.phoneNormalized === payload.phoneNormalized)
+    ))
+    : await findClientMatch(payload);
   if (duplicate && duplicate.id !== clientId) throw new Error("CLIENT_DUPLICATE");
   await updateDoc(doc(db, "clients", clientId), payload);
-  invalidateClientsCache();
+  const current = clientsById.get(clientId) || { id: clientId };
+  const saved = { ...current, ...payload };
+  clientsById.set(clientId, saved);
+  if (clientsCache) {
+    clientsCache = clientsCache.map((client) => client.id === clientId ? saved : client)
+      .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "ca"));
+  }
+  return saved;
 }
 
 function normalizeReservationConcepts(concepts = []) {
