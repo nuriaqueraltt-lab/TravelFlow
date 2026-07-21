@@ -47,8 +47,8 @@
 
 .leads-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 210px auto;
-  align-items: center;
+  grid-template-columns: minmax(240px, 1.35fr) repeat(3, minmax(150px, .75fr)) auto;
+  align-items: end;
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid rgba(38, 76, 62, .1);
@@ -59,17 +59,32 @@
 }
 
 .leads-search { position: relative; }
+.leads-toolbar__field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.leads-toolbar__field > span {
+  color: var(--color-text-muted);
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
 .leads-search::before {
   content: "⌕";
   position: absolute;
   left: 16px;
-  top: 50%;
+  bottom: 14px;
   z-index: 1;
-  transform: translateY(-50%);
   color: var(--color-brand-700);
   font-size: 1.15rem;
   pointer-events: none;
 }
+
+.leads-toolbar__actions { display: flex; align-items: center; gap: var(--space-2); }
+.leads-clear-filters { min-height: 46px; white-space: nowrap; }
+.leads-filter-active { border-color: rgba(47, 70, 59, .3); background: var(--color-brand-050); color: var(--color-brand-900); font-weight: 750; }
 
 .leads-search input,
 .leads-filter {
@@ -294,6 +309,9 @@
 .lead-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
 
 @media (max-width: 1100px) {
+  .leads-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leads-search { grid-column: 1 / -1; }
+  .leads-toolbar__actions { justify-content: flex-end; }
   .leads-table-head { display: none; }
   .lead-row { grid-template-columns: minmax(220px, 1fr) 140px 110px 28px; }
   .lead-row__interest, .lead-row__date { display: none; }
@@ -304,6 +322,9 @@
   .lead-detail-hero { align-items: stretch; flex-direction: column; }
   .leads-page .page-heading .primary-button { width: 100%; }
   .leads-toolbar { grid-template-columns: 1fr; }
+  .leads-search { grid-column: auto; }
+  .leads-toolbar__actions { align-items: stretch; flex-direction: column; }
+  .leads-clear-filters { width: 100%; }
   .leads-filter { width: 100%; }
   .leads-count { justify-content: center; }
   .lead-row { grid-template-columns: 1fr auto; min-height: 76px; padding: 14px 16px; }

@@ -22,6 +22,7 @@ import { clearManualNextAction, saveManualNextAction } from "../services/next-ac
 import { getTripInterestStatus, hasActiveTripInterests } from "../services/trip-interest.model.js";
 
 const CHANNEL_LABELS = { WEB: "Web", WHATSAPP: "WhatsApp", INSTAGRAM: "Instagram", FACEBOOK: "Facebook", EMAIL: "Email", PHONE: "Telèfon", OTHER: "Altres" };
+const SOURCE_LABELS = { WEBSITE_FORM: "Formulari web", GOOGLE_ADS: "Google Ads", WHATSAPP: "WhatsApp", INSTAGRAM_ORGANIC: "Instagram", FACEBOOK_ORGANIC: "Facebook", MANYCHAT: "ManyChat", REFERRAL: "Recomanació", RETURNING_CUSTOMER: "Clienta repetidora", MANUAL: "Entrada manual", OTHER: "Altres" };
 const STATUS_LABELS = { NEW: "Nou", INFO_SENT: "Informació enviada", FOLLOW_UP: "En seguiment", REPLIED: "Ha contestat", PENDING_DECISION: "Pendent de decisió", BOOKING_CONFIRMED: "Reserva confirmada", CONTACT_LATER: "Contactar més endavant", LOST: "Perdut" };
 const LOST_LABELS = { NO_RESPONSE: "Sense resposta", PRICE: "Preu", DATES: "Dates", HEALTH: "Salut", NO_HOLIDAYS: "No té vacances", BOOKED_ELSEWHERE: "Viatja amb una altra agència", DESTINATION: "Destinació no adequada", OTHER: "Altres" };
 const ENTRY_PRESETS = {
@@ -77,8 +78,21 @@ function renderRows(leads) {
   if (!leads.length) return `<div class="leads-empty"><h2>No hi ha resultats</h2><p>Prova una altra cerca o crea una futura viatgera.</p></div>`;
   return leads.map((lead) => `<button class="lead-row" type="button" data-lead-id="${lead.id}"><span class="lead-row__person"><span class="lead-row__avatar">${initials(lead.fullName)}</span><span><strong>${escapeHtml(lead.fullName)}</strong><small>${escapeHtml(lead.email || lead.phone || "Sense contacte")}</small></span></span><span class="lead-row__interest">${escapeHtml(lead.tripLabels?.join(", ") || lead.interest || "Sense viatge")}</span><span class="lead-channel lead-channel--${String(lead.channel || "OTHER").toLowerCase()}">${CHANNEL_LABELS[lead.channel] || "Altres"}</span><span class="lead-status">${STATUS_LABELS[lead.status] || lead.status}</span><span class="lead-row__date">${formatDate(lead.nextActionAt)}</span><span>→</span></button>`).join("");
 }
+function renderFilterOptions(items, labels, emptyLabel) {
+  return `<option value="">${emptyLabel}</option>${items.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(labels[value] || value)}</option>`).join("")}`;
+}
+function getTripFilterOptions(leads) {
+  const trips = new Map();
+  leads.forEach((lead) => (lead.tripIds || []).forEach((tripId, index) => {
+    if (tripId && !trips.has(tripId)) trips.set(tripId, lead.tripLabels?.[index] || lead.tripInterests?.[tripId]?.tripName || "Viatge");
+  }));
+  return [...trips.entries()].sort((a, b) => a[1].localeCompare(b[1], "ca"));
+}
 function renderList(leads) {
-  return `<section class="leads-page"><header class="page-heading"><div><span class="section-kicker">Gestió comercial</span><h1>Futures viatgeres</h1><p>Cerca, filtra i obre qualsevol historial comercial.</p></div><button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button></header><section class="leads-toolbar"><label class="leads-search"><input id="leadsSearch" type="search" placeholder="Nom, telèfon, correu o viatge..." /></label><select id="leadsChannelFilter" class="leads-filter"><option value="">Tots els canals</option><option value="WEB">Web</option><option value="WHATSAPP">WhatsApp</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option></select><div class="leads-count"><strong id="leadsCount">${leads.length}</strong> registrades</div></section><section class="leads-table-card"><div class="leads-table-head"><span>Futura viatgera</span><span>Viatge</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div><div id="leadsRows">${renderRows(leads)}</div></section></section>`;
+  const origins = [...new Set(leads.map((lead) => lead.source || lead.channel || "OTHER"))].sort((a, b) => (SOURCE_LABELS[a] || CHANNEL_LABELS[a] || a).localeCompare(SOURCE_LABELS[b] || CHANNEL_LABELS[b] || b, "ca"));
+  const originLabels = { ...CHANNEL_LABELS, ...SOURCE_LABELS };
+  const tripOptions = getTripFilterOptions(leads).map(([tripId, label]) => `<option value="${escapeHtml(tripId)}">${escapeHtml(label)}</option>`).join("");
+  return `<section class="leads-page"><header class="page-heading"><div><span class="section-kicker">Gestió comercial</span><h1>Futures viatgeres</h1><p>Cerca, filtra i obre qualsevol historial comercial.</p></div><button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button></header><section class="leads-toolbar"><label class="leads-search leads-toolbar__field"><span>Cerca</span><input id="leadsSearch" type="search" placeholder="Nom, telèfon, correu o viatge..." /></label><label class="leads-toolbar__field"><span>Origen</span><select id="leadsSourceFilter" class="leads-filter">${renderFilterOptions(origins, originLabels, "Tots els orígens")}</select></label><label class="leads-toolbar__field"><span>Viatge</span><select id="leadsTripFilter" class="leads-filter"><option value="">Tots els viatges</option>${tripOptions}</select></label><label class="leads-toolbar__field"><span>Estat</span><select id="leadsStatusFilter" class="leads-filter">${renderFilterOptions(Object.keys(STATUS_LABELS), STATUS_LABELS, "Tots els estats")}</select></label><div class="leads-toolbar__actions"><div class="leads-count"><strong id="leadsCount">${leads.length}</strong> registrades</div><button class="secondary-button leads-clear-filters" type="button" data-clear-lead-filters>Netejar</button></div></section><section class="leads-table-card"><div class="leads-table-head"><span>Futura viatgera</span><span>Viatge</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div><div id="leadsRows">${renderRows(leads)}</div></section></section>`;
 }
 function renderTimeline(activities, tasks) {
   const items = [...activities.map((item) => ({ ...item, timelineDate: item.createdAt, pending: false })), ...tasks.filter((task) => task.status === "PENDING").map((task) => ({ description: task.title, timelineDate: task.dueAt, pending: true }))].sort((a, b) => (a.timelineDate?.toMillis?.() ?? 0) - (b.timelineDate?.toMillis?.() ?? 0));
@@ -125,7 +139,22 @@ function renderActionForm(action, lead = null, pending = null, selectedTripId = 
 async function refreshDetail() { if (!currentLeadId) return; const [lead, activities, tasks, trips] = await Promise.all([getLeadById(currentLeadId), getLeadActivities(currentLeadId), getLeadTasks(currentLeadId), getTrips()]); tripsCache = trips; root().innerHTML = renderDetail(lead, activities, tasks); }
 export async function showLeadsView() { root().innerHTML = loading(); try { leadsCache = await getLeads(); await ensureExpiredLeadNextYearTasks(); root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
-function filterRows() { const search = normalizeText(document.querySelector("#leadsSearch")?.value || ""); const channel = document.querySelector("#leadsChannelFilter")?.value || ""; const filtered = leadsCache.filter((lead) => (!channel || lead.channel === channel) && (!search || normalizeText([lead.fullName, lead.phone, lead.email, lead.instagramHandle, lead.interest, ...(lead.tripLabels || [])].join(" ")).includes(search))); document.querySelector("#leadsRows").innerHTML = renderRows(filtered); document.querySelector("#leadsCount").textContent = filtered.length; }
+function filterRows() {
+  const search = normalizeText(document.querySelector("#leadsSearch")?.value || "");
+  const source = document.querySelector("#leadsSourceFilter")?.value || "";
+  const tripId = document.querySelector("#leadsTripFilter")?.value || "";
+  const status = document.querySelector("#leadsStatusFilter")?.value || "";
+  const filtered = leadsCache.filter((lead) => {
+    const matchesSearch = !search || normalizeText([lead.fullName, lead.phone, lead.email, lead.instagramHandle, lead.interest, ...(lead.tripLabels || [])].join(" ")).includes(search);
+    const matchesSource = !source || (lead.source || lead.channel || "OTHER") === source;
+    const matchesTrip = !tripId || lead.tripIds?.includes(tripId);
+    const relevantStatus = tripId ? getTripInterestStatus(lead, tripId) : lead.status;
+    return matchesSearch && matchesSource && matchesTrip && (!status || relevantStatus === status);
+  });
+  document.querySelector("#leadsRows").innerHTML = renderRows(filtered);
+  document.querySelector("#leadsCount").textContent = filtered.length;
+  document.querySelectorAll("#leadsSourceFilter, #leadsTripFilter, #leadsStatusFilter").forEach((select) => select.classList.toggle("leads-filter-active", Boolean(select.value)));
+}
 function filterEditTripOptions(searchInput) { const fieldset = searchInput.closest(".lead-edit-trips"); if (!fieldset) return; const query = normalizeText(searchInput.value); const options = [...fieldset.querySelectorAll("[data-trip-option]")]; let visible = 0; options.forEach((option) => { const matches = !query || normalizeText(option.textContent).includes(query); option.hidden = !matches; if (matches) visible += 1; }); const empty = fieldset.querySelector("[data-trip-tag-search-empty]"); if (empty) empty.hidden = visible > 0; }
 async function runQuickAction(action) {
   const lead = await getLeadById(currentLeadId);
@@ -177,11 +206,16 @@ document.addEventListener("click", async (event) => {
 });
 document.addEventListener("input", (event) => { if (event.target.id === "leadsSearch") filterRows(); if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target); });
 document.addEventListener("change", (event) => {
-  if (event.target.id === "leadsChannelFilter") filterRows();
+  if (event.target.matches("#leadsSourceFilter, #leadsTripFilter, #leadsStatusFilter")) filterRows();
   if (event.target.matches('.lead-edit-form input[name="tripIds"]')) {
     const status = event.target.closest("[data-trip-option]")?.querySelector("[data-trip-status]");
     if (status) status.disabled = !event.target.checked;
   }
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-clear-lead-filters]")) return;
+  ["leadsSearch", "leadsSourceFilter", "leadsTripFilter", "leadsStatusFilter"].forEach((id) => { const field = document.getElementById(id); if (field) field.value = ""; });
+  filterRows();
 });
 document.addEventListener("submit", async (event) => {
   const formType = event.target.dataset.form; if (!formType) return; event.preventDefault();
