@@ -1,6 +1,8 @@
 import {
   doc,
-  getDoc
+  getDoc,
+  serverTimestamp,
+  setDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 import { db } from "./firebase.service.js";
@@ -26,22 +28,31 @@ function normalizeProfile(user, data = {}) {
   };
 }
 
+async function createInitialAdminProfile(user) {
+  const profile = {
+    displayName: "Núria Queralt",
+    email: user.email || "",
+    role: USER_ROLES.ADMIN,
+    active: true,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+
+  await setDoc(doc(db, "users", user.uid), profile, { merge: true });
+  return normalizeProfile(user, profile);
+}
+
 export async function loadCurrentUserProfile(user) {
   if (!user) throw new Error("AUTH_REQUIRED");
-
-  if (ADMIN_EMAILS.has(String(user.email || "").toLowerCase())) {
-    currentProfile = normalizeProfile(user, {
-      displayName: "Núria Queralt",
-      role: USER_ROLES.ADMIN,
-      active: true
-    });
-    return currentProfile;
-  }
 
   const reference = doc(db, "users", user.uid);
   const snapshot = await getDoc(reference);
 
   if (!snapshot.exists()) {
+    if (ADMIN_EMAILS.has(String(user.email || "").toLowerCase())) {
+      currentProfile = await createInitialAdminProfile(user);
+      return currentProfile;
+    }
     throw new Error("PROFILE_NOT_CONFIGURED");
   }
 
@@ -80,7 +91,6 @@ export function getProfileErrorMessage(error) {
     PROFILE_NOT_CONFIGURED: "Aquest usuari encara no té accés autoritzat a TravelFlow.",
     PROFILE_DISABLED: "Aquest accés està desactivat.",
     PROFILE_ROLE_INVALID: "El perfil no té un rol vàlid. Contacta amb l’administració.",
-    PROFILE_TIMEOUT: "La comprovació del perfil ha tardat massa. Torna-ho a provar.",
     "permission-denied": "No s’ha pogut comprovar el perfil d’accés."
   };
 

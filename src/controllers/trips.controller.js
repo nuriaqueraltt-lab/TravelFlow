@@ -1,4 +1,4 @@
-import { createTripTag, getTripErrorMessage, getTrips, TRIP_PROCESS_STEPS, updateTripDates } from "../services/trip.service.js";
+import { createTripTag, getTripErrorMessage, getTrips, seedInitialTrips, TRIP_PROCESS_STEPS, updateTripDates } from "../services/trip.service.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260721-3";
 import { getConfirmedBookings } from "../services/lead.service.js";
 import { isBookedForTrip } from "../services/trip-interest.model.js";
@@ -99,25 +99,8 @@ function filterTrips() {
 }
 
 function setTripsActive() { document.querySelectorAll(".sidebar-nav__item").forEach((button) => button.classList.toggle("is-active", button.textContent.trim().startsWith("Viatges"))); }
-async function loadTrips() { tripsCache = await getTrips(); return tripsCache; }
-async function showTripsHub() {
-  const root = getRoot();
-  if (!root) return;
-  root.innerHTML = '<section class="trips-hub-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>';
-  try {
-    const [trips, bookings, clients] = await Promise.all([
-      loadTrips(),
-      getConfirmedBookings(),
-      getClients().catch((error) => {
-        console.warn("No s'han pogut carregar els noms actualitzats de clientes:", error);
-        return [];
-      })
-    ]);
-    root.innerHTML = renderTripsHub(trips, bookings, clients);
-  } catch (error) {
-    root.innerHTML = `<section class="trips-hub-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`;
-  }
-}
+async function loadTrips() { await seedInitialTrips(); tripsCache = await getTrips(); return tripsCache; }
+async function showTripsHub() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-hub-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant viatges...</p></div></section>'; try { const [trips, bookings, clients] = await Promise.all([loadTrips(), getConfirmedBookings(), getClients()]); root.innerHTML = renderTripsHub(trips, bookings, clients); } catch (error) { root.innerHTML = `<section class="trips-hub-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 async function showTripTags() { const root = getRoot(); if (!root) return; root.innerHTML = '<section class="trips-management-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant etiquetes...</p></div></section>'; try { root.innerHTML = renderTripsView(await loadTrips()); } catch (error) { root.innerHTML = `<section class="trips-management-page"><div class="leads-error">${getTripErrorMessage(error)}</div></section>`; } }
 
 document.addEventListener("click", (event) => {
