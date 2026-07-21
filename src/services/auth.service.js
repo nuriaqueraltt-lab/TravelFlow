@@ -41,5 +41,5 @@ export function getAuthErrorMessage(error) {
     "auth/user-disabled": "Aquest usuari està desactivat."
   };
 
-  return messages[error?.code] ?? "No s'ha pogut iniciar la sessió. Torna-ho a provar.";
+  return messages[error?.code] ?? messages[error?.message] ?? "No s'ha pogut iniciar la sessió. Torna-ho a provar.";
 }
