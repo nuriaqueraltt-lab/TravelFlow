@@ -159,6 +159,10 @@ function renderActionForm(action, lead = null, pending = null, selectedTripId = 
 
 async function refreshDetail() { if (!currentLeadId) return; const [lead, activities, tasks, trips] = await Promise.all([getLeadById(currentLeadId), getLeadActivities(currentLeadId), getLeadTasks(currentLeadId), getTrips()]); tripsCache = trips; root().innerHTML = renderDetail(lead, activities, tasks); }
 export async function showLeadsView() { root().innerHTML = loading(); try { leadsCache = await getLeads(); await ensureExpiredLeadNextYearTasks(); root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
+
+window.addEventListener("travelflow:restore-navigation", (event) => {
+  currentLeadId = event.detail?.currentLeadId || null;
+});
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 function filterRows() {
   const search = normalizeText(document.querySelector("#leadsSearch")?.value || "");
