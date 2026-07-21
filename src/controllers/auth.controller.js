@@ -11,7 +11,7 @@ import {
   getRoleLabel,
   loadCurrentUserProfile
 } from "../services/user-profile.service.js";
-import { showAppShell } from "../app.js?v=20260721-1";
+import { showAppShell } from "../app.js?v=20260721-2";
 
 let restoringSession = false;
 let logoutInProgress = false;
@@ -122,10 +122,11 @@ function applyProfileToShell(profile) {
   window.dispatchEvent(new CustomEvent("travelflow:user-ready", { detail: profile }));
 }
 
-function continueToApp(form, profile) {
-  form.dataset.authenticated = "true";
+function continueToApp(profile) {
+  document.body.dataset.userRole = profile.role;
+  document.body.dataset.userUid = profile.uid;
   showAppShell();
-  requestAnimationFrame(() => requestAnimationFrame(() => applyProfileToShell(profile)));
+  applyProfileToShell(profile);
 }
 
 async function authenticateAndLoadProfile(user, elements) {
@@ -136,7 +137,7 @@ async function authenticateAndLoadProfile(user, elements) {
       "PROFILE_LOAD_TIMEOUT"
     );
     setLoginState(elements);
-    continueToApp(elements.form, profile);
+    continueToApp(profile);
   } catch (error) {
     clearCurrentUserProfile();
     await logout().catch(() => {});

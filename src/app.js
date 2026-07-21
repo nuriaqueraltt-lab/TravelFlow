@@ -170,7 +170,6 @@ export function showAppShell() {
 }
 
 function setupLoginInteractions() {
-  const form = document.querySelector("#loginForm");
   const passwordInput = document.querySelector("#passwordInput");
   const passwordToggle = document.querySelector("#passwordToggle");
 
@@ -180,14 +179,6 @@ function setupLoginInteractions() {
     passwordToggle.setAttribute("aria-label", shouldShow ? "Amagar la contrasenya" : "Mostrar la contrasenya");
   });
 
-  form?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-    showAppShell();
-  });
 }
 
 function bootstrap() {
