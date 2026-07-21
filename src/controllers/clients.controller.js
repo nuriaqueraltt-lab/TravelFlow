@@ -15,14 +15,19 @@ function renderList(clients) {
   return `<section class="clients-page">
     <header class="page-heading clients-heading"><div><span class="section-kicker">Viatgeres confirmades</span><h1>Clientes</h1><p>Dades personals i viatges reservats en un únic lloc.</p></div><div class="clients-count"><strong>${clients.length}</strong><span>clientes</span></div></header>
     <section class="clients-toolbar"><label><span>Buscar clienta</span><input id="clientsSearch" type="search" placeholder="Nom, telèfon, correu o DNI..." autocomplete="off"></label><label class="clients-check"><input id="superTravelerFilter" type="checkbox"><span>Només superviatgeres</span></label></section>
-    <div class="clients-grid" id="clientsGrid">${clients.map(renderCard).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div>
+    <section class="clients-table-card"><div class="clients-table-head"><span>Clienta</span><span>Contacte</span><span>Viatges</span><span>Pagaments</span><span></span></div><div id="clientsRows">${clients.map(renderRow).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div></section>
   </section>`;
 }
 
-function renderCard(client) {
+function renderRow(client) {
   const reservations = Object.values(client.reservations || {});
-  return `<button class="client-card" type="button" data-client-id="${client.id}" data-search="${esc([client.fullName, client.phone, client.email, client.dni].join(" ").toLowerCase())}" data-super="${Boolean(client.superTraveler)}">
-    <span class="client-card__avatar">${initials(client.fullName)}</span><span class="client-card__body"><span class="client-card__title"><strong>${esc(client.fullName || "Sense nom")}</strong>${client.superTraveler ? '<em>★ Superviatgera</em>' : ""}</span><small>${esc(client.email || client.phone || "Dades de contacte pendents")}</small><span>${reservations.length} ${reservations.length === 1 ? "viatge reservat" : "viatges reservats"}</span></span><span class="client-card__arrow">→</span>
+  const pending = reservations.reduce((sum, reservation) => {
+    const paid = Number(reservation.totalPaid) || (reservation.payments || []).reduce((paymentSum, payment) => paymentSum + (Number(payment.amount) || 0), 0);
+    return sum + Math.max(0, (Number(reservation.total) || 0) - paid);
+  }, 0);
+  const contact = client.email || client.phone || "Dades pendents";
+  return `<button class="client-row" type="button" data-client-id="${client.id}" data-search="${esc([client.fullName, client.phone, client.email, client.dni].join(" ").toLowerCase())}" data-super="${Boolean(client.superTraveler)}" data-pending="${pending > 0}">
+    <span class="client-row__person"><span class="client-row__avatar">${initials(client.fullName)}</span><span><strong>${esc(client.fullName || "Sense nom")}</strong>${client.superTraveler ? '<em>★ Superviatgera</em>' : ""}</span></span><span class="client-row__contact">${esc(contact)}</span><span class="client-row__trips"><strong>${reservations.length}</strong><small>${reservations.length === 1 ? "viatge" : "viatges"}</small></span><span class="client-payment-status ${pending > 0 ? "has-pending" : "is-clear"}">${pending > 0 ? `${money(pending)} pendent` : "Al dia"}</span><span class="client-row__arrow">→</span>
   </button>`;
 }
 
@@ -97,15 +102,15 @@ document.addEventListener("input", (event) => {
   if (!event.target.matches("#clientsSearch, #superTravelerFilter")) return;
   const query = document.querySelector("#clientsSearch")?.value.trim().toLowerCase() || "";
   const superOnly = document.querySelector("#superTravelerFilter")?.checked;
-  document.querySelectorAll(".client-card").forEach((card) => { card.hidden = !card.dataset.search.includes(query) || (superOnly && card.dataset.super !== "true"); });
+  document.querySelectorAll(".client-row").forEach((row) => { row.hidden = !row.dataset.search.includes(query) || (superOnly && row.dataset.super !== "true"); });
 });
 
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-retry-clients]")) { showClientsView(); return; }
   const directClient = event.target.closest("[data-open-client-id]");
   if (directClient) { window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } })); showDetail(directClient.dataset.openClientId); return; }
-  const card = event.target.closest(".client-card[data-client-id]");
-  if (card) { showDetail(card.dataset.clientId); return; }
+  const row = event.target.closest(".client-row[data-client-id]");
+  if (row) { showDetail(row.dataset.clientId); return; }
   const reservation = event.target.closest("[data-client-reservation]");
   if (reservation) { const form = reservation.closest(".client-detail-page")?.querySelector("#clientForm"); showReservation(form?.dataset.clientId, reservation.dataset.clientReservation); return; }
   if (event.target.closest("[data-back-clients]")) showClientsView();
