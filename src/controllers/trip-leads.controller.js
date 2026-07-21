@@ -162,12 +162,19 @@ function getPriceConcepts(trip) {
 
 function renderPriceRow(concept, index, total) {
   return `<article class="trip-price-row" data-price-row data-price-id="${escapeHtml(concept.id)}">
-    <div class="trip-price-row__order"><button type="button" data-price-move="up" aria-label="Pujar concepte" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-price-move="down" aria-label="Baixar concepte" ${index === total - 1 ? "disabled" : ""}>↓</button></div>
-    <label><span>Concepte</span><input name="conceptName" maxlength="120" required value="${escapeHtml(concept.name)}" placeholder="Nom del concepte"></label>
-    <label><span>Import</span><span class="trip-price-amount"><input name="conceptAmount" type="number" min="0" max="1000000" step="0.01" required value="${Number(concept.amount) || 0}"><i>€</i></span></label>
-    <label><span>Aplicació</span><select name="conceptApplication"><option value="REQUIRED" ${concept.application === "REQUIRED" ? "selected" : ""}>Obligatori</option><option value="OPTIONAL" ${concept.application === "OPTIONAL" ? "selected" : ""}>Opcional</option><option value="INFORMATIONAL" ${concept.application === "INFORMATIONAL" ? "selected" : ""}>Informatiu</option></select></label>
-    <label><span>Preu</span><select name="conceptPriceStatus"><option value="FINAL" ${concept.priceStatus === "FINAL" ? "selected" : ""}>Definitiu</option><option value="ESTIMATED" ${concept.priceStatus === "ESTIMATED" ? "selected" : ""}>Estimat</option></select></label>
-    <button class="trip-price-row__delete" type="button" data-price-delete aria-label="Eliminar ${escapeHtml(concept.name)}">Eliminar</button>
+    <div class="trip-price-row__rail">
+      <span class="trip-price-row__number">${String(index + 1).padStart(2, "0")}</span>
+      <div class="trip-price-row__order"><button type="button" data-price-move="up" aria-label="Pujar concepte" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-price-move="down" aria-label="Baixar concepte" ${index === total - 1 ? "disabled" : ""}>↓</button></div>
+    </div>
+    <div class="trip-price-row__main">
+      <label class="trip-price-row__name"><span>Concepte</span><input name="conceptName" maxlength="120" required value="${escapeHtml(concept.name)}" placeholder="Nom del concepte"></label>
+      <label class="trip-price-row__amount"><span>Import</span><span class="trip-price-amount"><input name="conceptAmount" type="number" min="0" max="1000000" step="0.01" required value="${Number(concept.amount) || 0}"><i>€</i></span></label>
+    </div>
+    <div class="trip-price-row__settings">
+      <label><span>Qui el contracta?</span><select name="conceptApplication"><option value="REQUIRED" ${concept.application === "REQUIRED" ? "selected" : ""}>Inclòs per a tothom</option><option value="OPTIONAL" ${concept.application === "OPTIONAL" ? "selected" : ""}>Selecció opcional</option><option value="INFORMATIONAL" ${concept.application === "INFORMATIONAL" ? "selected" : ""}>Només informatiu</option></select></label>
+      <label><span>Estat de l’import</span><select name="conceptPriceStatus"><option value="FINAL" ${concept.priceStatus === "FINAL" ? "selected" : ""}>Preu definitiu</option><option value="ESTIMATED" ${concept.priceStatus === "ESTIMATED" ? "selected" : ""}>Preu estimat</option></select></label>
+    </div>
+    <div class="trip-price-row__footer"><span>Concepte ${index + 1} de ${total}</span><button class="trip-price-row__delete" type="button" data-price-delete aria-label="Eliminar ${escapeHtml(concept.name)}">Eliminar concepte</button></div>
   </article>`;
 }
 
