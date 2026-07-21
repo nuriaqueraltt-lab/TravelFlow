@@ -194,7 +194,8 @@ function renderTripDetail(trip, leads, message = "") {
   const matching = getSortedLeads(trip, leads);
   const bookings = matching.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
   return `<section class="trip-detail-page">
-    <header class="page-heading"><div><span class="section-kicker">Fitxa central del viatge</span><h1>${escapeHtml(trip.name?.replace(/^\d{4}\s*-\s*/, "") || "Viatge")}</h1><p>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)} · ${matching.length} leads · ${bookings} reserves.</p></div><button class="secondary-button" type="button" data-back-trips>← Tornar a Viatges</button></header>
+    <button class="trip-detail-back" type="button" data-back-trips>← Tornar a Viatges</button>
+    <header class="page-heading"><div><span class="section-kicker">Fitxa central del viatge</span><h1>${escapeHtml(trip.name?.replace(/^\d{4}\s*-\s*/, "") || "Viatge")}</h1><p>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)} · ${matching.length} leads · ${bookings} reserves.</p></div></header>
     ${renderTabs(currentTripTab)}
     <div class="trip-detail-content">${renderActiveTab(trip, matching, message)}</div>
   </section>`;
