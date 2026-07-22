@@ -6,8 +6,11 @@ import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
+const CLIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 let clientsCache = null;
 let clientsCacheComplete = false;
+let clientsCacheLoadedAt = 0;
+let clientsRequest = null;
 const clientsById = new Map();
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
@@ -17,18 +20,32 @@ function phoneKey(value) { return clean(value).replace(/\D/g, ""); }
 function dniKey(value) { return clean(value).toUpperCase().replace(/[\s.-]/g, ""); }
 const CLIENT_DISCOVERY_CHANNELS = new Set(["FACEBOOK", "INSTAGRAM", "WEB", "GOOGLE", "FRIENDS", "OTHER"]);
 
-export function invalidateClientsCache() { clientsCache = null; clientsCacheComplete = false; clientsById.clear(); }
+export function invalidateClientsCache() {
+  clientsCache = null;
+  clientsCacheComplete = false;
+  clientsCacheLoadedAt = 0;
+  clientsById.clear();
+}
 window.addEventListener("travelflow:clients-updated", invalidateClientsCache);
 
 export async function getClients({ force = false } = {}) {
-  if (!force && clientsCache) return clientsCache;
-  const snapshot = await getDocs(collection(db, "clients"));
-  clientsCache = snapshot.docs.map(mapDocument).filter((client) => client.active !== false)
-    .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "ca"));
-  clientsById.clear();
-  clientsCache.forEach((client) => clientsById.set(client.id, client));
-  clientsCacheComplete = true;
-  return clientsCache;
+  const cacheIsFresh = clientsCache && (Date.now() - clientsCacheLoadedAt < CLIENTS_CACHE_TTL_MS);
+  if (!force && cacheIsFresh) return clientsCache;
+  if (clientsRequest) return clientsRequest;
+
+  clientsRequest = getDocs(collection(db, "clients"))
+    .then((snapshot) => {
+      clientsCache = snapshot.docs.map(mapDocument).filter((client) => client.active !== false)
+        .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "ca"));
+      clientsById.clear();
+      clientsCache.forEach((client) => clientsById.set(client.id, client));
+      clientsCacheComplete = true;
+      clientsCacheLoadedAt = Date.now();
+      return clientsCache;
+    })
+    .finally(() => { clientsRequest = null; });
+
+  return clientsRequest;
 }
 
 export async function getClient(clientId) {
