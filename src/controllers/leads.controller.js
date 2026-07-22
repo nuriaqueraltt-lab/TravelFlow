@@ -59,6 +59,10 @@ function renderBookingConcepts(lead, tripId, active) {
 let leadsCache = [];
 let currentLeadId = null;
 let tripsCache = [];
+let currentActivities = [];
+let currentActivityCursor = null;
+let currentActivitiesHasMore = false;
+let currentLeadTasks = [];
 
 function root() { return document.querySelector(".app-content"); }
 function formatDate(value, withTime = false) {
@@ -134,7 +138,7 @@ function renderDetail(lead, activities, tasks) {
   const nextTitle = terminal ? "Sense acció" : pending?.title || lead.nextActionTitle || "Sense acció";
   const nextDate = terminal ? null : pending?.dueAt || lead.nextActionAt;
   const trip = lead.tripLabels?.join(", ") || lead.interest || "Sense viatge";
-  return `<section class="lead-detail-page"><button class="lead-detail-back" type="button" data-back-to-leads>← Tornar</button><header class="lead-detail-hero"><div class="lead-detail-hero__avatar">${initials(lead.fullName)}</div><div class="lead-detail-hero__content"><span class="section-kicker">Futura viatgera</span><h1>${escapeHtml(lead.fullName)}</h1><div class="lead-detail-hero__meta"><span class="lead-channel lead-channel--${String(lead.channel || "OTHER").toLowerCase()}">${CHANNEL_LABELS[lead.channel] || "Altres"}</span><span>${escapeHtml(trip)}</span></div>${renderContactLinks(lead)}</div><button class="secondary-button" type="button" data-edit-lead>Editar dades i etiquetes</button></header>${renderExpiredLeadBanner(lead, tasks)}<section id="leadEditPanel"></section><section class="lead-summary-grid"><article><span>Estat</span><strong>${STATUS_LABELS[lead.status] || lead.status}</strong></article><article><span>Viatge</span><strong>${escapeHtml(trip)}</strong></article><article><span>Pròxima acció</span><strong>${escapeHtml(nextTitle)}</strong>${terminal ? "" : '<button class="link-button" type="button" data-action="edit-next-action">Editar pròxima acció</button>'}</article><article><span>Data pròxima acció</span><strong>${formatDate(nextDate)}</strong></article><article><span>Sense resposta</span><strong>${Number(lead.noResponseCount || 0)} de 2</strong></article></section><section class="lead-quick-actions"><button data-action="contact">Afegir contacte</button><button data-action="replied">Ha contestat</button><button data-action="no-response">Sense resposta</button><button data-action="schedule">Programar seguiment</button><button data-action="booking">Reserva confirmada</button><button class="is-danger" data-action="lost">Marcar com a perdut</button></section><section class="lead-action-panel" id="leadActionPanel"></section><div class="lead-detail-grid"><article class="content-card lead-detail-card"><header><span class="section-kicker">Contacte</span><h2>Dades principals</h2></header><dl class="lead-data-list"><div><dt>Telèfon</dt><dd>${escapeHtml(lead.phone || "—")}</dd></div><div><dt>Correu</dt><dd>${escapeHtml(lead.email || "—")}</dd></div>${lead.instagramHandle ? `<div><dt>Instagram</dt><dd>${escapeHtml(lead.instagramHandle)}</dd></div>` : ""}${lead.facebookUrl ? `<div><dt>Facebook</dt><dd>Enllaç guardat</dd></div>` : ""}<div><dt>Canal</dt><dd>${CHANNEL_LABELS[lead.channel] || "Altres"}</dd></div><div><dt>Alta</dt><dd>${formatDate(lead.createdAt)}</dd></div></dl>${lead.notes ? `<div class="lead-notes"><span>Observacions</span><p>${escapeHtml(lead.notes)}</p></div>` : ""}</article><article class="content-card lead-detail-card"><header><span class="section-kicker">Historial complet</span><h2>Interaccions comercials</h2></header><div class="timeline">${renderTimeline(activities, tasks)}</div></article></div></section>`;
+  return `<section class="lead-detail-page"><button class="lead-detail-back" type="button" data-back-to-leads>← Tornar</button><header class="lead-detail-hero"><div class="lead-detail-hero__avatar">${initials(lead.fullName)}</div><div class="lead-detail-hero__content"><span class="section-kicker">Futura viatgera</span><h1>${escapeHtml(lead.fullName)}</h1><div class="lead-detail-hero__meta"><span class="lead-channel lead-channel--${String(lead.channel || "OTHER").toLowerCase()}">${CHANNEL_LABELS[lead.channel] || "Altres"}</span><span>${escapeHtml(trip)}</span></div>${renderContactLinks(lead)}</div><button class="secondary-button" type="button" data-edit-lead>Editar dades i etiquetes</button></header>${renderExpiredLeadBanner(lead, tasks)}<section id="leadEditPanel"></section><section class="lead-summary-grid"><article><span>Estat</span><strong>${STATUS_LABELS[lead.status] || lead.status}</strong></article><article><span>Viatge</span><strong>${escapeHtml(trip)}</strong></article><article><span>Pròxima acció</span><strong>${escapeHtml(nextTitle)}</strong>${terminal ? "" : '<button class="link-button" type="button" data-action="edit-next-action">Editar pròxima acció</button>'}</article><article><span>Data pròxima acció</span><strong>${formatDate(nextDate)}</strong></article><article><span>Sense resposta</span><strong>${Number(lead.noResponseCount || 0)} de 2</strong></article></section><section class="lead-quick-actions"><button data-action="contact">Afegir contacte</button><button data-action="replied">Ha contestat</button><button data-action="no-response">Sense resposta</button><button data-action="schedule">Programar seguiment</button><button data-action="booking">Reserva confirmada</button><button class="is-danger" data-action="lost">Marcar com a perdut</button></section><section class="lead-action-panel" id="leadActionPanel"></section><div class="lead-detail-grid"><article class="content-card lead-detail-card"><header><span class="section-kicker">Contacte</span><h2>Dades principals</h2></header><dl class="lead-data-list"><div><dt>Telèfon</dt><dd>${escapeHtml(lead.phone || "—")}</dd></div><div><dt>Correu</dt><dd>${escapeHtml(lead.email || "—")}</dd></div>${lead.instagramHandle ? `<div><dt>Instagram</dt><dd>${escapeHtml(lead.instagramHandle)}</dd></div>` : ""}${lead.facebookUrl ? `<div><dt>Facebook</dt><dd>Enllaç guardat</dd></div>` : ""}<div><dt>Canal</dt><dd>${CHANNEL_LABELS[lead.channel] || "Altres"}</dd></div><div><dt>Alta</dt><dd>${formatDate(lead.createdAt)}</dd></div></dl>${lead.notes ? `<div class="lead-notes"><span>Observacions</span><p>${escapeHtml(lead.notes)}</p></div>` : ""}</article><article class="content-card lead-detail-card"><header><span class="section-kicker">Historial comercial</span><h2>Interaccions comercials</h2></header><div class="timeline">${renderTimeline(activities, tasks)}</div>${currentActivitiesHasMore ? '<button class="secondary-button" type="button" data-load-more-activities>Carregar més</button>' : ""}</article></div></section>`;
 }
 
 function renderActionForm(action, lead = null, pending = null, selectedTripId = "") {
@@ -158,7 +162,21 @@ function renderActionForm(action, lead = null, pending = null, selectedTripId = 
   return "";
 }
 
-async function refreshDetail() { if (!currentLeadId) return; const [lead, activities, tasks, trips] = await Promise.all([getLeadById(currentLeadId), getLeadActivities(currentLeadId), getLeadTasks(currentLeadId), getTrips()]); tripsCache = trips; root().innerHTML = renderDetail(lead, activities, tasks); }
+async function refreshDetail() {
+  if (!currentLeadId) return;
+  const [lead, activityPage, tasks, trips] = await Promise.all([
+    getLeadById(currentLeadId),
+    getLeadActivities(currentLeadId),
+    getLeadTasks(currentLeadId),
+    getTrips()
+  ]);
+  tripsCache = trips;
+  currentActivities = activityPage.items;
+  currentActivityCursor = activityPage.cursor;
+  currentActivitiesHasMore = activityPage.hasMore;
+  currentLeadTasks = tasks;
+  root().innerHTML = renderDetail(lead, currentActivities, currentLeadTasks);
+}
 export async function showLeadsView() { root().innerHTML = loading(); try { leadsCache = await getLeads(); await ensureExpiredLeadNextYearTasks(); root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 function filterRows() {
@@ -220,6 +238,30 @@ document.addEventListener("click", async (event) => {
     if (!window.confirm("Vols eliminar la pròxima acció i cancel·lar totes les tasques pendents?")) return;
     try { const lead = await getLeadById(currentLeadId); await clearManualNextAction({ lead }); await refreshDetail(); window.dispatchEvent(new CustomEvent("travelflow:tasks-updated")); }
     catch (error) { window.alert(getWorkflowErrorMessage(error)); }
+    return;
+  }
+  const loadMoreActivities = event.target.closest("[data-load-more-activities]");
+  if (loadMoreActivities) {
+    loadMoreActivities.disabled = true;
+    loadMoreActivities.textContent = "Carregant...";
+    try {
+      const page = await getLeadActivities(currentLeadId, { cursor: currentActivityCursor });
+      currentActivities = [...currentActivities, ...page.items];
+      currentActivityCursor = page.cursor;
+      currentActivitiesHasMore = page.hasMore;
+      const timeline = document.querySelector(".timeline");
+      if (timeline) timeline.innerHTML = renderTimeline(currentActivities, currentLeadTasks);
+      if (page.hasMore) {
+        loadMoreActivities.disabled = false;
+        loadMoreActivities.textContent = "Carregar més";
+      } else {
+        loadMoreActivities.remove();
+      }
+    } catch (error) {
+      loadMoreActivities.disabled = false;
+      loadMoreActivities.textContent = "Carregar més";
+      window.alert(getLeadErrorMessage(error));
+    }
     return;
   }
   const action = event.target.closest("[data-action]"); if (action) runQuickAction(action.dataset.action);
