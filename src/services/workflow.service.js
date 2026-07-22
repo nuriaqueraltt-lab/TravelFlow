@@ -68,7 +68,7 @@ export async function getLeadTasks(leadId, { force = false } = {}) {
   if (!force && cached && Date.now() - cached.loadedAt < TASK_CACHE_TTL) return cached.tasks;
   if (!force && leadTasksRequests.has(leadId)) return leadTasksRequests.get(leadId);
 
-  const request = getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId)))
+  const request = getDocs(query(collection(db, "tasks"), where("leadId", "==", leadId), where("status", "==", TASK_STATUSES.PENDING)))
     .then((snapshot) => {
       const tasks = sortTasks(snapshot.docs.map(mapDocument));
       leadTasksCache.set(leadId, { tasks, loadedAt: Date.now() });
