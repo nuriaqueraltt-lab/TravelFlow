@@ -81,11 +81,20 @@ export async function createLead(input) {
   const tripIds = parseArrayValue(input.tripIds);
   const tripLabels = parseArrayValue(input.tripLabels);
   const tripInterests = buildTripInterests({}, tripIds, tripLabels);
+  const whatsappOrigin = input.entryPreset === "WHATSAPP" ? (input.whatsappOrigin || "OTHER") : "";
+  const googleAdsEntryMethod = input.entryPreset === "GOOGLE_ADS" ? (input.googleAdsEntryMethod || "") : "";
+  const isGoogleAdsForm = googleAdsEntryMethod === "FORM";
   const leadData = {
     firstName, lastName, fullName, fullNameSearch: fullName.toLowerCase(), phone,
     phoneNormalized: normalizePhone(phone), email: normalizeEmail(input.email),
     instagramHandle: normalizeInstagram(input.instagramHandle), facebookUrl: input.facebookUrl?.trim() ?? "",
     channel: input.channel, source: input.source, entryPreset: input.entryPreset ?? "",
+    whatsappOrigin,
+    googleAdsEntryMethod,
+    googleAdsCampaignId: isGoogleAdsForm ? input.googleAdsCampaignId?.trim() ?? "" : "",
+    googleAdsAdGroupId: isGoogleAdsForm ? input.googleAdsAdGroupId?.trim() ?? "" : "",
+    googleAdsAdId: isGoogleAdsForm ? input.googleAdsAdId?.trim() ?? "" : "",
+    googleAdsSearchTheme: isGoogleAdsForm ? input.googleAdsSearchTheme?.trim() ?? "" : "",
     tripIds, tripLabels, tripInterests, interest: tripLabels.join(", "), notes: input.notes?.trim() ?? "",
     status: LEAD_STATUSES.NEW, priority: LEAD_PRIORITIES.NORMAL, temperature: LEAD_TEMPERATURES.WARM,
     ownerId: currentUser.uid, createdBy: currentUser.uid, updatedBy: currentUser.uid,

@@ -235,6 +235,47 @@ body.modal-open {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.lead-entry-detail-options {
+  border: 1px solid var(--border-color, #e5ddd7);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.lead-entry-detail-options legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.lead-entry-detail-options > p {
+  margin: 0 0 12px;
+  color: var(--text-muted, #6f6864);
+  font-size: 0.9rem;
+}
+
+.lead-entry-detail-options__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lead-entry-detail-options__choices label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, #e5ddd7);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.lead-entry-google-fields {
+  margin-top: 16px;
+}
+
+.lead-entry-google-fields[hidden] {
+  display: none;
+}
+
 .lead-entry-dates legend {
   padding: 0 var(--space-2);
   color: var(--color-text-primary);

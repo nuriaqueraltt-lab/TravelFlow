@@ -45,6 +45,31 @@ function renderSourceStep() {
 }
 
 function renderChannelSpecificField(presetKey) {
+  if (presetKey === "WHATSAPP") {
+    return `<fieldset class="quick-lead-form__wide lead-entry-detail-options">
+      <legend>D'on arriba aquest WhatsApp?</legend>
+      <p>Si no selecciones cap opció, es guardarà com a Altres.</p>
+      <div class="lead-entry-detail-options__choices">
+        <label><input name="whatsappOrigin" type="radio" value="FACEBOOK_AD" /> <span>Publi Facebook</span></label>
+        <label><input name="whatsappOrigin" type="radio" value="INSTAGRAM_AD" /> <span>Publi Instagram</span></label>
+      </div>
+    </fieldset>`;
+  }
+  if (presetKey === "GOOGLE_ADS") {
+    return `<fieldset class="quick-lead-form__wide lead-entry-detail-options">
+      <legend>Com ha entrat des de Google Ads? *</legend>
+      <div class="lead-entry-detail-options__choices">
+        <label><input name="googleAdsEntryMethod" type="radio" value="WHATSAPP" required /> <span>WhatsApp</span></label>
+        <label><input name="googleAdsEntryMethod" type="radio" value="FORM" required /> <span>Formulari</span></label>
+      </div>
+      <div class="quick-lead-form__grid lead-entry-google-fields" data-google-ads-form-fields hidden>
+        <label class="form-field"><span>ID campanya</span><div class="form-control form-control--plain"><input name="googleAdsCampaignId" type="text" /></div></label>
+        <label class="form-field"><span>ID grup d'anuncis</span><div class="form-control form-control--plain"><input name="googleAdsAdGroupId" type="text" /></div></label>
+        <label class="form-field"><span>ID anunci</span><div class="form-control form-control--plain"><input name="googleAdsAdId" type="text" /></div></label>
+        <label class="form-field"><span>Tema de cerca</span><div class="form-control form-control--plain"><input name="googleAdsSearchTheme" type="text" /></div></label>
+      </div>
+    </fieldset>`;
+  }
   if (presetKey === "INSTAGRAM") {
     return `<label class="form-field quick-lead-form__wide"><span>Usuari o enllaç d'Instagram</span><div class="form-control form-control--plain"><input name="instagramHandle" type="text" placeholder="@usuaria o https://instagram.com/usuaria" /></div></label>`;
   }
@@ -165,6 +190,12 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("input", (event) => {
   if (event.target.matches("#quickLeadForm [data-trip-tag-search]")) filterTripOptions(event.target);
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.matches('#quickLeadForm input[name="googleAdsEntryMethod"]')) return;
+  const fields = event.target.closest("fieldset")?.querySelector("[data-google-ads-form-fields]");
+  if (fields) fields.hidden = event.target.value !== "FORM";
 });
 
 document.addEventListener("submit", async (event) => {
