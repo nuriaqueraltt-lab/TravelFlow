@@ -9,7 +9,9 @@ import { invalidateClientsCache } from "./client.service.js";
 function clean(value) { return String(value ?? "").trim().replace(/\s+/g, " "); }
 function documentKey(value) { return clean(value).toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function emailKey(value) { return clean(value).toLowerCase(); }
-function phoneKey(value) { return clean(value).replace(/\D/g, "").replace(/^0034/, "34").replace(/^34(?=\d{9}$)/, ""); }
+function phoneKey(value) {
+  return clean(value).split(/\s*(?:·|\/|\||;)\s*/, 1)[0].replace(/\D/g, "").replace(/^0034/, "34").replace(/^34(?=\d{9}$)/, "");
+}
 
 function importDocumentId(item) {
   const source = [item.line, item.fullName, item.dni, item.passport, item.email, item.phone].join("|");

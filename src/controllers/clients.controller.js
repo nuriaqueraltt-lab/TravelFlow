@@ -17,7 +17,7 @@ const CLIENT_DISCOVERY_CHANNELS = {
 };
 
 function whatsappUrl(phone = "") {
-  let digits = String(phone).replace(/\D/g, "");
+  let digits = String(phone).split(/\s*(?:·|\/|\||;)\s*/, 1)[0].replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.length === 9) digits = `34${digits}`;
   return digits ? `https://wa.me/${digits}` : "";

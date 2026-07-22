@@ -3,6 +3,7 @@ function textKey(value) { return clean(value).normalize("NFD").replace(/[\u0300-
 function documentKey(value) { return clean(value).toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function emailKey(value) { return clean(value).toLowerCase(); }
 function phoneKey(value) { return clean(value).replace(/\D/g, "").replace(/^0034/, "34").replace(/^34(?=\d{9}$)/, ""); }
+function phoneKeys(value) { return clean(value).split(/\s*(?:·|\/|\||;)\s*/).map(phoneKey).filter(Boolean); }
 
 const FIELD_ALIASES = {
   firstName: ["nom", "nombre"],
@@ -11,11 +12,11 @@ const FIELD_ALIASES = {
   fullName: ["nomcognoms", "nombreapellidos", "client", "cliente", "clienta", "nomclient", "nombrecliente"],
   dni: ["dni", "nif", "nifcod", "document", "documentidentitat", "documento", "documentonif"],
   passport: ["passaport", "pasaporte"],
-  phone: ["telefon", "telefono", "telefonowhatsapp", "tlf1", "telf1", "telefon1", "telefono1", "mobil", "movil", "whatsapp"],
+  phone: ["telefon", "telefono", "telefonowhatsapp", "tlf", "telf", "tlf1", "telf1", "telefon1", "telefono1", "mobil", "movil", "whatsapp"],
   email: ["email", "correu", "correuelectronic", "correoelectronico", "mail"],
-  address: ["adreca", "direccion", "domicili", "domicilio"],
-  postalCode: ["codipostal", "codigopostal", "cp"],
-  city: ["poblacio", "poblacion", "ciutat", "ciudad", "localitat", "localidad"],
+  address: ["adreca", "adreca1", "direccion", "direccion1", "domicili", "domicilio"],
+  postalCode: ["codipostal", "codigopostal", "postal", "cp"],
+  city: ["poblacio", "poblacion", "pob", "ciutat", "ciudad", "localitat", "localidad"],
   province: ["provincia"],
   country: ["pais", "country"],
   superTraveler: ["superviatgera", "superviajera", "categoria", "categoria1", "category"]
@@ -50,13 +51,24 @@ function parseRows(text) {
 function columnMap(headers) {
   const normalized = headers.map(textKey); const result = {};
   Object.entries(FIELD_ALIASES).forEach(([field, aliases]) => {
-    const index = normalized.findIndex((header) => aliases.includes(header));
-    if (index >= 0) result[field] = index;
+    const indexes = normalized.reduce((matches, header, index) => {
+      const exact = aliases.includes(header);
+      const numberedPhone = field === "phone" && /^(?:telefon|telefono|tlf|telf|mobil|movil|whatsapp)\d+$/.test(header);
+      const labelledAddress = ["address", "postalCode", "city", "province", "country"].includes(field)
+        && aliases.some((alias) => header === `${alias}client` || header === `${alias}cliente` || header === `${alias}1`);
+      if (exact || numberedPhone || labelledAddress) matches.push(index);
+      return matches;
+    }, []);
+    if (indexes.length) result[field] = field === "phone" ? indexes : indexes[0];
   });
   return result;
 }
 
-function cell(row, columns, field) { return columns[field] === undefined ? "" : clean(row[columns[field]]); }
+function cell(row, columns, field) {
+  if (columns[field] === undefined) return "";
+  const indexes = Array.isArray(columns[field]) ? columns[field] : [columns[field]];
+  return [...new Set(indexes.map((index) => clean(row[index])).filter(Boolean))].join(" · ");
+}
 function isSuperTraveler(value) { return /^(1|si|sí|true|x|superviatgera|superviajera)$/i.test(clean(value)) || /super/i.test(clean(value)); }
 
 function normalizeRow(row, columns, line) {
@@ -74,18 +86,18 @@ function normalizeRow(row, columns, line) {
 function indexExisting(clients) {
   const indexes = { dni: new Map(), passport: new Map(), email: new Map(), phone: new Map() };
   clients.forEach((client) => {
-    [["dni", documentKey(client.dni)], ["passport", documentKey(client.passport)], ["email", emailKey(client.email)], ["phone", phoneKey(client.phone)]].forEach(([field, key]) => {
+    [["dni", [documentKey(client.dni)]], ["passport", [documentKey(client.passport)]], ["email", [emailKey(client.email)]], ["phone", phoneKeys(client.phone)]].forEach(([field, keys]) => keys.forEach((key) => {
       if (!key) return; const values = indexes[field].get(key) || []; values.push(client); indexes[field].set(key, values);
-    });
+    }));
   });
   return indexes;
 }
 
 function matchesFor(item, indexes) {
   const found = new Map();
-  [["dni", documentKey(item.dni)], ["passport", documentKey(item.passport)], ["email", emailKey(item.email)], ["phone", phoneKey(item.phone)]].forEach(([field, key]) => {
+  [["dni", [documentKey(item.dni)]], ["passport", [documentKey(item.passport)]], ["email", [emailKey(item.email)]], ["phone", phoneKeys(item.phone)]].forEach(([field, keys]) => keys.forEach((key) => {
     (key ? indexes[field].get(key) || [] : []).forEach((client) => found.set(client.id, client));
-  });
+  }));
   return [...found.values()];
 }
 
@@ -99,9 +111,9 @@ export function previewClientImport(text, existingClients = []) {
     if (!item.fullName) return { ...item, status: "INVALID", reason: "Falta el nom" };
     const matches = matchesFor(item, indexes);
     const repeated = [];
-    [["dni", documentKey(item.dni)], ["passport", documentKey(item.passport)], ["email", emailKey(item.email)], ["phone", phoneKey(item.phone)]].forEach(([field, key]) => {
+    [["dni", [documentKey(item.dni)]], ["passport", [documentKey(item.passport)]], ["email", [emailKey(item.email)]], ["phone", phoneKeys(item.phone)]].forEach(([field, keys]) => keys.forEach((key) => {
       if (!key) return; if (seen[field].has(key)) repeated.push(seen[field].get(key)); else seen[field].set(key, item.line);
-    });
+    }));
     if (matches.length > 1) return { ...item, status: "REVIEW", reviewType: "MULTIPLE_EXISTING", reason: "Les dades coincideixen amb més d’una clienta existent" };
     if (repeated.length) return { ...item, status: "REVIEW", reviewType: "DUPLICATE_IN_FILE", reason: `Possible duplicat dins del fitxer (línia ${repeated[0]})` };
     if (matches.length === 1) return { ...item, status: "EXISTING", reason: `Ja existeix: ${matches[0].fullName || "clienta sense nom"}`, existingClientId: matches[0].id };
