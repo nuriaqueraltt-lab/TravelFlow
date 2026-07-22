@@ -1,4 +1,4 @@
-import { createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
+import { cancelClientReservation, createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
@@ -135,7 +135,7 @@ export async function showClientsView() {
 
 function reservationRows(client) {
   const reservations = Object.values(client.reservations || {});
-  return reservations.map((item) => { const paid = Number(item.totalPaid) || (item.payments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0); const pending = Math.max(0, (Number(item.total) || 0) - paid); return `<button class="client-trip" type="button" data-client-reservation="${esc(item.tripId)}"><div><strong>${esc(item.tripName || "Viatge")}</strong><span>Reserva confirmada · ${date(item.bookedAt?.toDate?.() || item.bookedAt)}</span><small>${item.dui ? "DUI" : "Habitació compartida"}</small></div><div><span>Pagat ${money(paid)}</span><strong>${money(pending)} pendent</strong><small>Veure i editar →</small></div></button>`; }).join("") || '<p class="clients-muted">No hi ha viatges vinculats.</p>';
+  return reservations.map((item) => { const paid = Number(item.totalPaid) || (item.payments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0); const cancelled = item.status === "CANCELLED"; const pending = cancelled ? 0 : Math.max(0, (Number(item.total) || 0) - paid); return `<button class="client-trip ${cancelled ? "is-cancelled" : ""}" type="button" data-client-reservation="${esc(item.tripId)}"><div><strong>${esc(item.tripName || "Viatge")}</strong><span>${cancelled ? "Reserva cancel·lada" : "Reserva confirmada"} · ${date(item.bookedAt?.toDate?.() || item.bookedAt)}</span><small>${item.dui ? "DUI" : "Habitació compartida"}</small></div><div><span>Pagat ${money(paid)}</span><strong>${cancelled ? "Històric conservat" : `${money(pending)} pendent`}</strong><small>${cancelled ? "Veure historial →" : "Veure i editar →"}</small></div></button>`; }).join("") || '<p class="clients-muted">No hi ha viatges vinculats.</p>';
 }
 
 function field(label, name, value = "", type = "text", required = false) { return `<label><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${required ? "required" : ""}></label>`; }
@@ -205,6 +205,10 @@ function renderReservation(client, reservation, trip) {
   const linkedPricing = reservation.pricingMode === "TRIP";
   const paid = Number(reservation.totalPaid) || (reservation.payments || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const pending = Math.max(0, (Number(reservation.total) || 0) - paid);
+  if (reservation.status === "CANCELLED") {
+    const cancellation = reservation.cancellation || {};
+    return `<section class="client-reservation-page"><div class="lead-detail-actions"><button class="lead-detail-back" type="button" data-back-client-detail>← Tornar a la fitxa de ${esc(client.fullName)}</button></div><header class="client-reservation-hero"><div><span class="section-kicker">Reserva cancel·lada</span><h1>${esc(reservation.tripName || trip?.name || "Viatge")}</h1><p>L'historial comercial i econòmic es conserva sense modificar.</p></div><div><span>Total pagat</span><strong>${money(paid)}</strong></div></header><section class="content-card"><h2>Dades de la cancel·lació</h2><dl class="lead-data-list"><div><dt>Motiu</dt><dd>${esc(cancellation.reason || "No indicat")}</dd></div><div><dt>Import retornat</dt><dd>${money(cancellation.refundedAmount)}</dd></div><div><dt>Despesa o penalització</dt><dd>${money(cancellation.cancellationFee)}</dd></div><div><dt>Observacions</dt><dd>${esc(cancellation.notes || "—")}</dd></div></dl></section></section>`;
+  }
   return `<section class="client-reservation-page"><div class="lead-detail-actions"><button class="lead-detail-back" type="button" data-back-client-detail>← Tornar a la fitxa de ${esc(client.fullName)}</button><button class="secondary-button" type="button" data-open-trip="${esc(reservation.tripId)}">Anar al viatge →</button></div><header class="client-reservation-hero"><div><span class="section-kicker">Reserva de ${esc(client.fullName)}</span><h1>${esc(reservation.tripName || trip?.name || "Viatge")}</h1><p>Edita serveis, habitació i pagaments des d’una única fitxa.</p></div><div><span>Pendent actual</span><strong data-reservation-pending>${money(pending)}</strong></div></header><form id="clientReservationForm" data-client-id="${client.id}" data-trip-id="${esc(reservation.tripId)}"><section class="content-card client-reservation-settings"><header><div><span class="section-kicker">Dades de la reserva</span><h2>Habitació i operativa</h2></div></header><div class="client-reservation-fields"><label class="client-dui-toggle"><input name="dui" type="checkbox" ${reservation.dui ? "checked" : ""}><span><strong>DUI</strong><small>Habitació doble d’ús individual</small></span></label>${field("Companya d’habitació", "roommate", reservation.roommate)}${field("Ciutat o aeroport de sortida", "departureCity", reservation.departureCity)}<label class="client-reservation-wide"><span>Observacions de la reserva</span><textarea name="notes" rows="3">${esc(reservation.notes || "")}</textarea></label></div></section><section class="content-card client-reservation-concepts"><header><div><span class="section-kicker">Preu contractat</span><h2>Conceptes de la reserva</h2></div><strong data-reservation-total>${money(reservation.total)}</strong></header><label class="client-pricing-mode"><input type="checkbox" name="linkedPricing" ${linkedPricing ? "checked" : ""}><span><strong>Actualitzar sempre amb els preus del viatge</strong><small>Si canvies els preus generals, aquesta reserva es recalcularà automàticament. Desactiva-ho per aplicar imports personalitzats a aquesta clienta.</small></span></label><div>${concepts.map((concept) => `<div class="client-reservation-concept ${concept.selected ? "is-selected" : ""}"><input type="checkbox" name="reservationConcept" value="${esc(concept.id)}" data-name="${esc(concept.name)}" data-application="${esc(concept.application)}" data-price-status="${esc(concept.priceStatus)}" ${concept.selected ? "checked" : ""} ${concept.application === "REQUIRED" ? "disabled" : ""}><span><strong>${esc(concept.name)}</strong><small>${concept.application === "REQUIRED" ? "Inclòs per a tothom" : concept.application === "INFORMATIONAL" ? "Informatiu · no suma" : "Opcional"}</small></span><label class="client-concept-amount"><input type="number" name="reservationConceptAmount" min="0" max="1000000" step="0.01" value="${Number(concept.amount) || 0}" data-trip-amount="${Number(concept.tripAmount ?? concept.amount) || 0}" ${linkedPricing ? "readonly" : ""}><i>€</i></label></div>`).join("")}</div></section><section class="content-card client-reservation-payments"><header><div><span class="section-kicker">Control de cobraments</span><h2>Pagaments</h2></div><button class="secondary-button" type="button" data-add-payment>+ Afegir pagament</button></header><div data-payments-list>${(reservation.payments || []).map(paymentRow).join("") || '<p class="clients-muted" data-no-payments>Encara no hi ha cap pagament registrat.</p>'}</div><footer><span>Pagat <strong data-reservation-paid>${money(paid)}</strong></span><span>Pendent <strong data-reservation-footer-pending>${money(pending)}</strong></span></footer></section><div class="client-reservation-actions"><p role="status" data-reservation-message></p><button class="primary-button" type="submit">Guardar reserva</button></div></form></section>`;
 }
 
@@ -213,6 +217,11 @@ async function showReservation(clientId, tripId) {
   if (!client || !reservation) return showClientsView();
   let trip = null; try { trip = await getTripById(tripId); } catch { /* La instantània permet editar encara que el viatge ja no sigui actiu. */ }
   appContent().innerHTML = renderReservation(client, reservation, trip);
+  if (reservation.status !== "CANCELLED") {
+    const actions = appContent().querySelector(".client-reservation-actions");
+    actions?.insertAdjacentHTML("afterbegin", '<button class="secondary-button is-danger" type="button" data-show-reservation-cancellation>Cancel·lar reserva</button>');
+    appContent().querySelector(".client-reservation-page")?.insertAdjacentHTML("beforeend", `<form class="content-card client-cancellation-form" data-reservation-cancellation-form data-client-id="${client.id}" data-trip-id="${esc(reservation.tripId)}" hidden><header><div><span class="section-kicker">Cancel·lació</span><h2>Conservar l'historial de la reserva</h2></div></header><div class="client-reservation-fields"><label><span>Data de cancel·lació</span><input type="date" name="cancelledOn" value="${new Date().toISOString().slice(0, 10)}" required></label><label><span>Motiu</span><select name="reason" required><option value="">Selecciona...</option><option value="PERSONAL">Motius personals</option><option value="HEALTH">Salut</option><option value="DATES">Dates</option><option value="PRICE">Pressupost</option><option value="OTHER">Altres</option></select></label>${field("Import retornat", "refundedAmount", "0", "number")}${field("Penalització o despesa", "cancellationFee", "0", "number")}<label class="client-reservation-wide"><span>Observacions</span><textarea name="notes" rows="3"></textarea></label><label class="client-super-toggle"><input type="checkbox" name="keepInterest"><span><strong>Continua interessada en aquest viatge</strong><small>El viatge tornarà al seguiment comercial.</small></span></label></div><p role="status" data-cancellation-message></p><div class="client-reservation-actions"><button class="secondary-button" type="button" data-hide-reservation-cancellation>Tornar</button><button class="primary-button is-danger" type="submit">Confirmar cancel·lació</button></div></form>`);
+  }
   const loyaltyDiscountAmount = appContent().querySelector('input[name="reservationConcept"][value="loyalty-discount"]')?.closest(".client-reservation-concept")?.querySelector('[name="reservationConceptAmount"]');
   if (loyaltyDiscountAmount) loyaltyDiscountAmount.min = "-1000000";
 }
@@ -293,6 +302,8 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-show-client-booking]")) { document.querySelector("[data-client-booking-form]")?.removeAttribute("hidden"); return; }
   if (event.target.closest("[data-cancel-client-booking]")) { document.querySelector("[data-client-booking-form]")?.setAttribute("hidden", ""); return; }
   if (event.target.closest("[data-add-payment]")) { const list = document.querySelector("[data-payments-list]"); list?.querySelector("[data-no-payments]")?.remove(); list?.insertAdjacentHTML("beforeend", paymentRow({ paidAt: new Date().toISOString().slice(0, 10), method: "TRANSFER_DEPOSIT" })); return; }
+  if (event.target.closest("[data-show-reservation-cancellation]")) { document.querySelector("[data-reservation-cancellation-form]")?.removeAttribute("hidden"); return; }
+  if (event.target.closest("[data-hide-reservation-cancellation]")) { document.querySelector("[data-reservation-cancellation-form]")?.setAttribute("hidden", ""); return; }
   const removePayment = event.target.closest("[data-remove-payment]");
   if (removePayment) { removePayment.closest("[data-payment-row]")?.remove(); refreshReservationTotals(); }
 });
@@ -323,8 +334,27 @@ document.addEventListener("change", async (event) => {
 });
 
 window.addEventListener("travelflow:open-clients", () => showClientsView());
+window.addEventListener("travelflow:open-client-reservation", (event) => {
+  if (!event.detail?.clientId || !event.detail?.tripId) return;
+  activate();
+  showReservation(event.detail.clientId, event.detail.tripId);
+});
 
 document.addEventListener("submit", async (event) => {
+  if (event.target.matches("[data-reservation-cancellation-form]")) {
+    event.preventDefault();
+    const form = event.target; const message = form.querySelector("[data-cancellation-message]"); const values = Object.fromEntries(new FormData(form));
+    if (!window.confirm("Confirmes la cancel·lació? La reserva es conservarà a l'historial i deixarà de comptar com a reserva activa.")) return;
+    try {
+      message.textContent = "Guardant cancel·lació...";
+      await cancelClientReservation(form.dataset.clientId, form.dataset.tripId, { ...values, keepInterest: form.elements.keepInterest.checked });
+      await showReservation(form.dataset.clientId, form.dataset.tripId);
+    } catch (error) {
+      console.error("No s'ha pogut cancel·lar la reserva", error);
+      message.textContent = error.message === "CANCELLATION_REFUND_OVER_PAID" ? "L'import retornat no pot superar el total pagat." : error.message === "CANCELLATION_REASON_REQUIRED" ? "Indica el motiu de la cancel·lació." : "No s'ha pogut guardar la cancel·lació. No s'ha modificat cap dada.";
+    }
+    return;
+  }
   if (event.target.matches("[data-client-booking-form]")) {
     event.preventDefault();
     const form = event.target; const message = form.querySelector("[data-client-booking-message]"); const button = form.querySelector('button[type="submit"]');

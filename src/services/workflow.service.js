@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -25,7 +24,7 @@ import {
   TASK_TYPES
 } from "../config/app.constants.js";
 import { buildTripInterests, compatibleLeadStatus, hasActiveTripInterests, isBookedForTrip } from "./trip-interest.model.js";
-import { ensureClientForBooking } from "./client.service.js";
+import { ensureClientForBooking, invalidateClientsCache } from "./client.service.js";
 
 const MAINTENANCE_KEY = "travelflow:dashboard-maintenance";
 const MAINTENANCE_TTL = 5 * 60 * 1000;
@@ -261,35 +260,13 @@ export async function confirmBooking(lead, { tripId, dui = false, priceConcepts 
   const keepsOtherInterests = hasActiveTripInterests({ ...lead, tripInterests });
   const batch = writeBatch(db);
   if (!wasBooked && !keepsOtherInterests) await cancelPendingTasks(lead.id, batch, { automaticOnly: false });
+  const clientId = await ensureClientForBooking(lead, { tripId, tripName, bookedAt, dui, pricingMode, priceConcepts: bookingPriceConcepts, total: bookingTotal }, batch);
   batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: wasBooked ? ACTIVITY_TYPES.NOTE : ACTIVITY_TYPES.BOOKING_CONFIRMED, description: `${wasBooked ? "Reserva actualitzada" : "Reserva confirmada"} · ${tripName} · DUI: ${dui ? "Sí" : "No"} · Total: ${bookingTotal.toLocaleString("ca-ES", { style: "currency", currency: "EUR" })}.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt, ...(!wasBooked && !keepsOtherInterests ? { nextActionAt: null, nextActionTitle: "" } : {}), updatedBy: user.uid, updatedAt: serverTimestamp() });
+  batch.update(doc(db, "leads", lead.id), { status: LEAD_STATUSES.BOOKING_CONFIRMED, tripInterests, bookingTripId: tripId, bookingTripNameSnapshot: tripName, bookingDui: Boolean(dui), bookedAt, clientId, ...(!wasBooked && !keepsOtherInterests ? { nextActionAt: null, nextActionTitle: "" } : {}), updatedBy: user.uid, updatedAt: serverTimestamp() });
   await commitLeadBatch(batch, lead.id);
-  const clientId = await ensureClientForBooking(lead, { tripId, tripName, bookedAt, dui, pricingMode, priceConcepts: bookingPriceConcepts, total: bookingTotal });
-  await updateDoc(doc(db, "leads", lead.id), { clientId, updatedBy: user.uid, updatedAt: serverTimestamp() });
-}
-
-export async function cancelBooking(lead, { tripId }) {
-  const user = getCurrentUser(); if (!user) throw new Error("AUTH_REQUIRED");
-  if (!tripId || !lead.tripIds?.includes(tripId) || !isBookedForTrip(lead, tripId)) throw new Error("BOOKING_NOT_FOUND");
-  const tripIndex = lead.tripIds.indexOf(tripId);
-  const tripName = lead.tripLabels?.[tripIndex] || lead.tripInterests?.[tripId]?.tripName || "Viatge";
-  const tripInterests = buildTripInterests(lead, lead.tripIds, lead.tripLabels);
-  tripInterests[tripId] = { ...tripInterests[tripId], status: LEAD_STATUSES.FOLLOW_UP, bookedAt: null, dui: false };
-  const remainingBookingId = lead.tripIds.find((id) => id !== tripId && tripInterests[id]?.status === LEAD_STATUSES.BOOKING_CONFIRMED) || "";
-  const remaining = remainingBookingId ? tripInterests[remainingBookingId] : null;
-  const batch = writeBatch(db);
-  batch.set(doc(collection(db, "activities")), { leadId: lead.id, type: ACTIVITY_TYPES.NOTE, description: `Reserva cancel·lada · ${tripName}. El viatge continua en seguiment.`, tripId, createdBy: user.uid, createdAt: serverTimestamp() });
-  batch.update(doc(db, "leads", lead.id), {
-    tripInterests,
-    status: remaining ? LEAD_STATUSES.BOOKING_CONFIRMED : LEAD_STATUSES.FOLLOW_UP,
-    bookingTripId: remainingBookingId || deleteField(),
-    bookingTripNameSnapshot: remaining?.tripName || deleteField(),
-    bookingDui: remaining ? Boolean(remaining.dui) : deleteField(),
-    bookedAt: remaining?.bookedAt || deleteField(),
-    updatedBy: user.uid,
-    updatedAt: serverTimestamp()
-  });
-  await commitLeadBatch(batch, lead.id);
+  invalidateClientsCache();
+  window.dispatchEvent(new CustomEvent("travelflow:clients-updated"));
+  return { clientId, tripId };
 }
 
 export async function markLeadLost({ lead, reason, note = "" }) {
@@ -322,6 +299,6 @@ export async function completeTask(taskId) {
 }
 
 export function getWorkflowErrorMessage(error) {
-  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", BOOKING_TRIP_REQUIRED: "Selecciona el viatge de la reserva.", BOOKING_PRICING_INVALID: "Revisa els conceptes i imports de la reserva.", BOOKING_NOT_FOUND: "Aquesta reserva ja no existeix o ha canviat.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
+  const messages = { AUTH_REQUIRED: "La sessió ha caducat.", TASK_DATA_REQUIRED: "Indica una acció i una data.", BOOKING_TRIP_REQUIRED: "Selecciona el viatge de la reserva.", BOOKING_PRICING_INVALID: "Revisa els conceptes i imports de la reserva.", BOOKING_CLIENT_REVIEW_REQUIRED: "Abans de confirmar, revisa la possible coincidència a Clientes i tria Vincular o No hi ha vincle.", BOOKING_NOT_FOUND: "Aquesta reserva ja no existeix o ha canviat.", LOST_REASON_REQUIRED: "Selecciona obligatòriament el motiu de pèrdua.", TRIP_CLOSED_DECISION_REQUIRED: "Selecciona què vols fer amb aquest lead.", "permission-denied": "No tens permís per completar aquesta operació." };
   return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'acció.";
 }

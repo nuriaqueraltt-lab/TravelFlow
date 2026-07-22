@@ -10,6 +10,7 @@ const STATUS_LABELS = {
   PENDING_DECISION: "Pendent de decisió",
   CONTACT_LATER: "Contactar més endavant",
   BOOKING_CONFIRMED: "Reserva confirmada",
+  CANCELLED: "Reserva cancel·lada",
   LOST: "Perdut"
 };
 
@@ -151,6 +152,15 @@ function isBookingForSelection(lead) {
   return selectedStatus(lead) === "BOOKING_CONFIRMED";
 }
 
+function wasConvertedForSelection(lead) {
+  if (isBookingForSelection(lead)) return true;
+  if (analyticsState.tripId) {
+    const interest = lead.tripInterests?.[analyticsState.tripId];
+    return interest?.status === "CANCELLED" && Boolean(interest.bookedAt);
+  }
+  return Object.values(lead.tripInterests || {}).some((interest) => ["BOOKING_CONFIRMED", "CANCELLED"].includes(interest?.status) && Boolean(interest.bookedAt));
+}
+
 function isCommercialAnalyticsLead(lead) {
   return lead.source !== "RETURNING_CUSTOMER" || lead.analyticsIncluded === true;
 }
@@ -204,6 +214,7 @@ function leadReachedStage(lead, stage) {
     PENDING_DECISION: 3,
     CONTACT_LATER: 3,
     BOOKING_CONFIRMED: 4,
+    CANCELLED: 4,
     LOST: 1
   }[status] ?? 0;
   return statusIndex >= stageIndex;
@@ -353,12 +364,14 @@ function renderLostReasons(leads) {
 
 function renderConversionSnapshot(leads) {
   const bookings = leads.filter(isBookingForSelection).length;
+  const conversions = leads.filter(wasConvertedForSelection).length;
+  const cancellations = Math.max(0, conversions - bookings);
   const lost = leads.filter((lead) => selectedStatus(lead) === "LOST").length;
-  const active = Math.max(leads.length - bookings - lost, 0);
-  const closed = bookings + lost;
-  const closedConversion = percentage(bookings, closed);
-  const overallConversion = percentage(bookings, leads.length);
-  return `<article class="analytics-card analytics-conversion-snapshot"><header><div><span class="section-kicker">Qualitat de la conversió</span><h2>Resultat de les decisions tancades</h2></div><span>${closed} casos resolts</span></header><div class="analytics-conversion-snapshot__main"><div><strong>${formatPercent(closedConversion)}</strong><span>acaben en reserva quan ja hi ha una decisió</span></div><div class="analytics-conversion-snapshot__bar"><i style="width:${closedConversion}%"></i></div></div><div class="analytics-conversion-snapshot__breakdown"><div><span>Reserves</span><strong>${bookings}</strong></div><div><span>Perduts</span><strong>${lost}</strong></div><div><span>Encara actius</span><strong>${active}</strong></div><div><span>Conversió global</span><strong>${formatPercent(overallConversion)}</strong></div></div><p>La conversió global inclou tots els leads oberts. La conversió tancada només compara reserves amb leads ja perduts i mostra millor l’efectivitat comercial real.</p></article>`;
+  const active = Math.max(leads.length - conversions - lost, 0);
+  const closed = conversions + lost;
+  const closedConversion = percentage(conversions, closed);
+  const overallConversion = percentage(conversions, leads.length);
+  return `<article class="analytics-card analytics-conversion-snapshot"><header><div><span class="section-kicker">Qualitat de la conversió</span><h2>Resultat de les decisions tancades</h2></div><span>${closed} casos resolts</span></header><div class="analytics-conversion-snapshot__main"><div><strong>${formatPercent(closedConversion)}</strong><span>han arribat a convertir quan ja hi ha una decisió</span></div><div class="analytics-conversion-snapshot__bar"><i style="width:${closedConversion}%"></i></div></div><div class="analytics-conversion-snapshot__breakdown"><div><span>Reserves actives</span><strong>${bookings}</strong></div><div><span>Cancel·lades després</span><strong>${cancellations}</strong></div><div><span>Perduts</span><strong>${lost}</strong></div><div><span>Encara actius</span><strong>${active}</strong></div><div><span>Conversió global</span><strong>${formatPercent(overallConversion)}</strong></div></div><p>Una cancel·lació redueix les reserves actives, però conserva la conversió comercial original.</p></article>`;
 }
 
 function renderFunnel(leads) {
@@ -452,13 +465,16 @@ function renderAnalytics() {
   const priorBounds = previousBounds(bounds);
   const previousLeads = priorBounds ? filteredLeads(priorBounds) : [];
   const bookings = leads.filter(isBookingForSelection).length;
+  const conversions = leads.filter(wasConvertedForSelection).length;
+  const cancellations = Math.max(0, conversions - bookings);
   const followUps = leads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(selectedStatus(lead))).length;
   const lost = leads.filter((lead) => selectedStatus(lead) === "LOST").length;
-  const conversion = percentage(bookings, leads.length);
+  const conversion = percentage(conversions, leads.length);
   const previousBookings = previousLeads.filter(isBookingForSelection).length;
+  const previousConversions = previousLeads.filter(wasConvertedForSelection).length;
   const previousFollowUps = previousLeads.filter((lead) => ["FOLLOW_UP", "REPLIED", "PENDING_DECISION", "CONTACT_LATER"].includes(selectedStatus(lead))).length;
   const previousLost = previousLeads.filter((lead) => selectedStatus(lead) === "LOST").length;
-  const previousConversion = percentage(previousBookings, previousLeads.length);
+  const previousConversion = percentage(previousConversions, previousLeads.length);
   const sources = aggregateSources(leads);
   const trips = aggregateTrips(leads);
   const topInterest = [...trips].sort((a, b) => b.leads - a.leads);
@@ -466,14 +482,15 @@ function renderAnalytics() {
   const freshness = analyticsDirty ? "Hi ha canvis pendents d’actualitzar" : analyticsUpdatedAt ? `Actualitzat a les ${analyticsUpdatedAt.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}` : "Dades preparades";
 
   return `<section class="analytics-page">
-    <header class="analytics-premium-hero"><div><span class="section-kicker">Control comercial</span><h1>Analítica Comercial</h1><p>Una lectura clara de què atrau futures viatgeres, què converteix i on convé actuar avui.</p></div><aside><span>Taxa de conversió</span><strong>${formatPercent(conversion)}</strong><small>${bookings} reserves de ${leads.length} leads</small><button type="button" data-refresh-analytics ${analyticsRefreshing ? "disabled" : ""}>${analyticsRefreshing ? "Actualitzant…" : "Actualitzar dades"}</button><em data-analytics-freshness>${freshness}</em></aside></header>
+    <header class="analytics-premium-hero"><div><span class="section-kicker">Control comercial</span><h1>Analítica Comercial</h1><p>Una lectura clara de què atrau futures viatgeres, què converteix i on convé actuar avui.</p></div><aside><span>Taxa de conversió</span><strong>${formatPercent(conversion)}</strong><small>${conversions} conversions · ${bookings} reserves actives</small><button type="button" data-refresh-analytics ${analyticsRefreshing ? "disabled" : ""}>${analyticsRefreshing ? "Actualitzant…" : "Actualitzar dades"}</button><em data-analytics-freshness>${freshness}</em></aside></header>
     ${renderFilters()}
     <section class="analytics-premium-metrics">
       ${renderMetric("Leads rebuts", leads.length, "Entrades en el període", metricTrend(leads.length, priorBounds ? previousLeads.length : null), "brand")}
-      ${renderMetric("Reserves confirmades", bookings, "Conversió comercial", metricTrend(bookings, priorBounds ? previousBookings : null), "success")}
+      ${renderMetric("Reserves actives", bookings, "Confirmades actualment", metricTrend(bookings, priorBounds ? previousBookings : null), "success")}
+      ${renderMetric("Cancel·lacions", cancellations, "Conversions cancel·lades després", { label: "Historial conservat", tone: cancellations ? "bad" : "neutral", icon: cancellations ? "↘" : "→" }, cancellations ? "warning" : "")}
       ${renderMetric("Oportunitats actives", followUps, "En seguiment o decisió", metricTrend(followUps, priorBounds ? previousFollowUps : null))}
       ${renderMetric("Leads perduts", lost, "Amb motiu registrat", metricTrend(lost, priorBounds ? previousLost : null, { inverse: true }), lost ? "warning" : "")}
-      ${renderMetric("Conversió", formatPercent(conversion), `${bookings} de ${leads.length} leads`, metricTrend(conversion, priorBounds ? previousConversion : null, { points: true }), "dark")}
+      ${renderMetric("Conversió", formatPercent(conversion), `${conversions} de ${leads.length} leads`, metricTrend(conversion, priorBounds ? previousConversion : null, { points: true }), "dark")}
     </section>
     ${renderInsights(buildInsights(leads, sources, trips))}
     ${renderConversionSnapshot(leads)}

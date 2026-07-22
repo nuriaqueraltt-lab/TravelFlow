@@ -1,4 +1,4 @@
-export const TRIP_INTEREST_TERMINAL_STATUSES = new Set(["BOOKING_CONFIRMED", "LOST"]);
+export const TRIP_INTEREST_TERMINAL_STATUSES = new Set(["BOOKING_CONFIRMED", "CANCELLED", "LOST"]);
 
 export function getTripInterestStatus(lead, tripId) {
   const stored = lead?.tripInterests?.[tripId]?.status;

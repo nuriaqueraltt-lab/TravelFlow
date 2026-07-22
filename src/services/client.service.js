@@ -52,10 +52,14 @@ export async function findClientMatch({ dni = "", email = "", phone = "" }) {
     || (await findOne("phoneNormalized", phoneKey(phone)));
 }
 
-export async function ensureClientForBooking(lead, booking) {
+export async function ensureClientForBooking(lead, booking, batch = null) {
   const user = getCurrentUser();
   if (!user) throw new Error("AUTH_REQUIRED");
-  const existing = await findClientMatch(lead);
+  const linked = lead.clientId ? await getClient(lead.clientId) : null;
+  const possibleMatch = linked ? null : await findClientMatch(lead);
+  const rejectedMatches = new Set(lead.rejectedClientMatchIds || []);
+  if (possibleMatch && !rejectedMatches.has(possibleMatch.id)) throw new Error("BOOKING_CLIENT_REVIEW_REQUIRED");
+  const existing = linked;
   const clientRef = existing ? doc(db, "clients", existing.id) : doc(collection(db, "clients"));
   const reservation = {
     ...(existing?.reservations?.[booking.tripId] || {}),
@@ -80,9 +84,79 @@ export async function ensureClientForBooking(lead, booking) {
     active: true, updatedBy: user.uid, updatedAt: serverTimestamp()
   };
   if (!existing) Object.assign(base, { address: "", postalCode: "", city: "", province: "", birthDate: "", dni: "", dniNormalized: "", dniExpiry: "", passport: "", passportExpiry: "", discoveryChannel: "", discoveryChannelOther: "", superTraveler: false, createdBy: user.uid, createdAt: serverTimestamp() });
-  await setDoc(clientRef, base, { merge: true });
-  invalidateClientsCache();
+  if (batch) batch.set(clientRef, base, { merge: true });
+  else await setDoc(clientRef, base, { merge: true });
+  if (!batch) invalidateClientsCache();
   return clientRef.id;
+}
+
+export async function cancelClientReservation(clientId, tripId, input = {}) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  const client = await getClient(clientId);
+  const current = client?.reservations?.[tripId];
+  if (!client || !current?.leadId || current.status === "CANCELLED") throw new Error("RESERVATION_NOT_FOUND");
+
+  const leadRef = doc(db, "leads", current.leadId);
+  const leadSnapshot = await getDoc(leadRef);
+  if (!leadSnapshot.exists()) throw new Error("RESERVATION_LEAD_NOT_FOUND");
+  const lead = leadSnapshot.data();
+  const tripInterests = { ...(lead.tripInterests || {}) };
+  const cancelledAt = input.cancelledOn
+    ? Timestamp.fromDate(new Date(`${input.cancelledOn}T12:00:00`))
+    : serverTimestamp();
+  const refundedAmount = Math.max(0, Number(input.refundedAmount) || 0);
+  const cancellationFee = Math.max(0, Number(input.cancellationFee) || 0);
+  const totalPaid = Number(current.totalPaid) || (current.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  if (!clean(input.reason)) throw new Error("CANCELLATION_REASON_REQUIRED");
+  if (refundedAmount > totalPaid) throw new Error("CANCELLATION_REFUND_OVER_PAID");
+  const keepInterest = Boolean(input.keepInterest);
+  const cancellation = {
+    cancelledAt,
+    reason: clean(input.reason),
+    refundedAmount,
+    cancellationFee,
+    notes: clean(input.notes),
+    cancelledBy: user.uid
+  };
+  const reservation = { ...current, status: "CANCELLED", cancellation, updatedAt: serverTimestamp() };
+  tripInterests[tripId] = {
+    ...(tripInterests[tripId] || {}),
+    status: keepInterest ? "FOLLOW_UP" : "CANCELLED",
+    cancellation
+  };
+  const remainingBookingId = (lead.tripIds || []).find((id) => id !== tripId && tripInterests[id]?.status === "BOOKING_CONFIRMED") || "";
+  const remaining = remainingBookingId ? tripInterests[remainingBookingId] : null;
+  const hasActiveInterest = (lead.tripIds || []).some((id) => !["BOOKING_CONFIRMED", "CANCELLED", "LOST"].includes(tripInterests[id]?.status || "NEW"));
+  const batch = writeBatch(db);
+  batch.update(doc(db, "clients", clientId), {
+    reservations: { ...(client.reservations || {}), [tripId]: reservation },
+    updatedBy: user.uid,
+    updatedAt: serverTimestamp()
+  });
+  batch.update(leadRef, {
+    tripInterests,
+    status: remaining ? "BOOKING_CONFIRMED" : (hasActiveInterest ? "FOLLOW_UP" : "CANCELLED"),
+    bookingTripId: remainingBookingId,
+    bookingTripNameSnapshot: remaining?.tripName || "",
+    bookingDui: remaining ? Boolean(remaining.dui) : false,
+    bookedAt: remaining?.bookedAt || null,
+    updatedBy: user.uid,
+    updatedAt: serverTimestamp()
+  });
+  batch.set(doc(collection(db, "activities")), {
+    leadId: current.leadId,
+    tripId,
+    type: "BOOKING_CANCELLED",
+    description: `Reserva cancel·lada des de la fitxa de clienta · ${current.tripName || "Viatge"}.`,
+    cancellation,
+    createdBy: user.uid,
+    createdAt: serverTimestamp()
+  });
+  await batch.commit();
+  invalidateClientsCache();
+  window.dispatchEvent(new CustomEvent("travelflow:leads-updated"));
+  return reservation;
 }
 
 export async function updateClient(clientId, input) {

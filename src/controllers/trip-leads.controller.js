@@ -1,6 +1,6 @@
 import { getLeadsByTrip } from "../services/lead.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing, updateTripSupplierPayments } from "../services/trip.service.js";
-import { getTripInterestStatus } from "../services/trip-interest.model.js";
+import { getTripInterestStatus, isBookedForTrip } from "../services/trip-interest.model.js";
 import { getClients } from "../services/client.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
@@ -26,6 +26,7 @@ const STATUS_LABELS = {
   REPLIED: "Ha contestat",
   PENDING_DECISION: "Pendent de decisió",
   BOOKING_CONFIRMED: "Reserva confirmada",
+  CANCELLED: "Reserva cancel·lada",
   CONTACT_LATER: "Contactar més endavant",
   LOST: "Perdut"
 };
@@ -112,8 +113,8 @@ function renderTabs(activeTab) {
 }
 
 function renderSummary(trip, leads) {
-  const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED");
-  const active = leads.filter((lead) => !["BOOKING_CONFIRMED", "LOST"].includes(lead.status));
+  const bookings = leads.filter((lead) => isBookedForTrip(lead, trip.id));
+  const active = leads.filter((lead) => !["BOOKING_CONFIRMED", "LOST", "CANCELLED"].includes(getTripInterestStatus(lead, trip.id)));
   const completed = TRIP_PROCESS_STEPS.filter(([key]) => trip.processChecklist?.[key] === true).length;
   const nextStep = TRIP_PROCESS_STEPS.find(([key]) => trip.processChecklist?.[key] !== true)?.[1] || "Checklist complet";
   const conversion = leads.length ? Math.round((bookings.length / leads.length) * 100) : 0;
@@ -188,7 +189,7 @@ function renderLeadsView(leads) {
 }
 
 function renderBookingsView(leads) {
-  const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED");
+  const bookings = leads.filter((lead) => isBookedForTrip(lead, currentTrip?.id));
   const configured = bookings.filter((lead) => Array.isArray(lead.tripInterests?.[currentTrip?.id]?.bookingPriceConcepts));
   const total = configured.reduce((sum, lead) => sum + (Number(lead.tripInterests?.[currentTrip?.id]?.bookingTotal) || 0), 0);
   const rows = bookings.map((lead) => { const client = clientForLead(lead); const name = client?.fullName || lead.fullName; const contact = client?.email || client?.phone || lead.email || lead.phone || "Sense contacte"; const booking = lead.tripInterests?.[currentTrip?.id] || {}; const concepts = Array.isArray(booking.bookingPriceConcepts) ? booking.bookingPriceConcepts : null; return `<button class="lead-row" type="button" ${client ? `data-open-client-id="${client.id}"` : `data-lead-id="${lead.id}"`}><span class="lead-row__person"><span class="lead-row__avatar">${initials(name)}</span><span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(contact)}</small></span></span><span>${booking.dui ? "DUI" : "Doble compartida / pendent"}</span><span>${concepts ? `${concepts.length} conceptes` : "Preu pendent"}</span><strong>${concepts ? formatCurrency(booking.bookingTotal) : "—"}</strong><span class="lead-status">Reserva confirmada</span><span>→</span></button>`; }).join("") || `<div class="leads-empty"><h2>Encara no hi ha reserves</h2><p>Quan una interessada confirmi la reserva apareixerà aquí.</p></div>`;
@@ -292,7 +293,7 @@ function renderOperationsView(trip, message = "") {
 }
 
 function renderAnalyticsView(leads) {
-  const bookings = leads.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+  const bookings = leads.filter((lead) => isBookedForTrip(lead, currentTrip?.id)).length;
   const channelCounts = Object.entries(leads.reduce((acc, lead) => {
     const channel = lead.channel || "OTHER";
     acc[channel] = (acc[channel] || 0) + 1;
@@ -300,7 +301,8 @@ function renderAnalyticsView(leads) {
   }, {})).sort((a, b) => b[1] - a[1]);
   const maxChannel = Math.max(...channelCounts.map(([, count]) => count), 1);
   const statusCounts = Object.entries(leads.reduce((acc, lead) => {
-    acc[lead.status] = (acc[lead.status] || 0) + 1;
+    const status = getTripInterestStatus(lead, currentTrip?.id);
+    acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {})).sort((a, b) => b[1] - a[1]);
 
@@ -325,7 +327,7 @@ function renderActiveTab(trip, leads, message = "") {
 
 function renderTripDetail(trip, leads, message = "") {
   const matching = getSortedLeads(trip, leads);
-  const bookings = matching.filter((lead) => lead.status === "BOOKING_CONFIRMED").length;
+  const bookings = matching.filter((lead) => isBookedForTrip(lead, trip.id)).length;
   return `<section class="trip-detail-page">
     <button class="trip-detail-back" type="button" data-back-trips>← Tornar a Viatges</button>
     <header class="page-heading"><div><span class="section-kicker">Fitxa central del viatge</span><h1>${escapeHtml(trip.name?.replace(/^\d{4}\s*-\s*/, "") || "Viatge")}</h1><p>${formatDate(trip.startDate)} – ${formatDate(trip.endDate)} · ${matching.length} leads · ${bookings} reserves.</p></div></header>
