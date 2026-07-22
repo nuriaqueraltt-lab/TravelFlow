@@ -3,6 +3,9 @@ import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
 import { importApprovedClients } from "../services/client-import.service.js";
+import { getLeads } from "../services/lead.service.js";
+import { findUnlinkedLeadClientMatches } from "../services/client-lead-match.service.js";
+import { showLeadDetail } from "./leads.controller.js";
 
 let pendingClientImportText = "";
 
@@ -33,9 +36,21 @@ function activate() {
   window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } }));
 }
 
-function renderList(clients) {
+function renderLinkNotice(matches) {
+  if (!matches.length) return "";
+  const safeCount = matches.filter((match) => match.confidence === "HIGH").length;
+  return `<section class="client-link-notice"><div><span class="client-link-notice__icon">↔</span><span><strong>${matches.length} possibles coincidències entre leads i clientes</strong><small>${safeCount} coincideixen per telèfon o correu. Encara no s’ha vinculat ni modificat cap registre.</small></span></div><button class="secondary-button" type="button" data-open-client-matches>Revisar coincidències</button></section>`;
+}
+
+function renderMatchesModal(matches) {
+  const rows = matches.map((match) => `<article class="client-match-row"><div><span class="client-match-confidence is-${match.confidence.toLowerCase()}">${match.confidence === "HIGH" ? "Coincidència alta" : "Cal revisar"}</span><strong>${esc(match.lead.fullName || "Lead sense nom")}</strong><small>Lead · ${esc(match.lead.email || match.lead.phone || "Sense contacte")}</small><button type="button" data-open-matched-lead="${esc(match.lead.id)}">Obrir lead →</button></div><span class="client-match-arrow">↔</span><div><span class="client-match-reasons">Mateix ${esc(match.reasons.join(" i "))}${match.ambiguous ? " · diverses candidates" : ""}</span><strong>${esc(match.client.fullName || "Clienta sense nom")}</strong><small>Clienta · ${esc(match.client.email || match.client.phone || "Sense contacte")}</small><button type="button" data-open-matched-client="${esc(match.client.id)}">Obrir clienta →</button></div></article>`).join("");
+  return `<div class="client-matches-modal" data-client-matches-modal><button class="client-matches-modal__backdrop" type="button" data-close-client-matches aria-label="Tancar"></button><section class="client-matches-panel" role="dialog" aria-modal="true" aria-labelledby="clientMatchesTitle"><header><div><span class="section-kicker">Revisió manual</span><h2 id="clientMatchesTitle">Possibles leads i clientes iguals</h2><p>Només es mostren leads actius que encara no tenen cap clienta vinculada.</p></div><button type="button" data-close-client-matches aria-label="Tancar">×</button></header><div class="client-match-list">${rows}</div><footer><p>No s’ha fet cap vinculació automàtica.</p><button class="secondary-button" type="button" data-close-client-matches>Tancar</button></footer></section></div>`;
+}
+
+function renderList(clients, matches = []) {
   return `<section class="clients-page">
     <header class="page-heading clients-heading"><div><span class="section-kicker">Viatgeres confirmades</span><h1>Clientes</h1><p>Dades personals i viatges reservats en un únic lloc.</p></div><div class="clients-heading__actions"><button class="secondary-button" type="button" data-open-client-import>Importar clientes</button><div class="clients-count"><strong>${clients.length}</strong><span>clientes</span></div></div></header>
+    ${renderLinkNotice(matches)}
     <section class="clients-toolbar"><label><span>Buscar clienta</span><input id="clientsSearch" type="search" placeholder="Nom, telèfon, correu o DNI..." autocomplete="off"></label><label class="clients-check"><input id="superTravelerFilter" type="checkbox"><span>Només superviatgeres</span></label></section>
     <section class="clients-table-card"><div class="clients-table-head"><span>Clienta</span><span>Contacte</span><span>Viatges</span><span>Pagaments</span><span></span></div><div id="clientsRows">${clients.map(renderRow).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div></section>
   </section>`;
@@ -100,7 +115,10 @@ export async function showClientsView() {
   const root = appContent();
   if (!root) return;
   root.innerHTML = '<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant clientes...</p></div>';
-  try { root.innerHTML = renderList(await getClients()); }
+  try {
+    const [clients, leads] = await Promise.all([getClients(), getLeads()]);
+    root.innerHTML = renderList(clients, findUnlinkedLeadClientMatches(leads, clients));
+  }
   catch (error) {
     console.error("No s’han pogut carregar les clientes", error);
     const permissionDenied = error?.code === "permission-denied";
@@ -192,6 +210,15 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-open-client-matches]")) {
+    Promise.all([getClients(), getLeads()]).then(([clients, leads]) => document.body.insertAdjacentHTML("beforeend", renderMatchesModal(findUnlinkedLeadClientMatches(leads, clients))));
+    return;
+  }
+  if (event.target.closest("[data-close-client-matches]")) { document.querySelector("[data-client-matches-modal]")?.remove(); return; }
+  const matchedLead = event.target.closest("[data-open-matched-lead]");
+  if (matchedLead) { document.querySelector("[data-client-matches-modal]")?.remove(); showLeadDetail(matchedLead.dataset.openMatchedLead); return; }
+  const matchedClient = event.target.closest("[data-open-matched-client]");
+  if (matchedClient) { document.querySelector("[data-client-matches-modal]")?.remove(); showDetail(matchedClient.dataset.openMatchedClient); return; }
   if (event.target.closest("[data-open-client-import]")) { pendingClientImportText = ""; document.body.insertAdjacentHTML("beforeend", renderImportModal()); return; }
   if (event.target.closest("[data-close-client-import]")) { pendingClientImportText = ""; document.querySelector("[data-client-import-modal]")?.remove(); return; }
   const confirmImport = event.target.closest("[data-confirm-client-import]");
