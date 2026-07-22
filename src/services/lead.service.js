@@ -1,4 +1,4 @@
-import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, startAfter, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { ACTIVITY_TYPES, FOLLOW_UP_DEFAULTS, LEAD_PRIORITIES, LEAD_STATUSES, LEAD_TEMPERATURES, TASK_STATUSES, TASK_TYPES } from "../config/app.constants.js";
@@ -157,5 +157,17 @@ export async function rejectLeadClientMatch(leadId, clientId) {
 
 export async function getLeads({ force = false } = {}) { if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache; if (!force && leadsRequest) return leadsRequest; leadsRequest = getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc"))).then((snapshot) => setLeadsCache(snapshot.docs.map(mapDocument))).finally(() => { leadsRequest = null; }); return leadsRequest; }
 export async function getLeadById(leadId, { force = false } = {}) { if (!force && leadsCache) { const cached = leadsCache.find((lead) => lead.id === leadId); if (cached) return cached; } const snapshot = await getDoc(doc(db, "leads", leadId)); const lead = snapshot.exists() ? mapDocument(snapshot) : null; if (lead) upsertLeadCache(lead); return lead; }
-export async function getLeadActivities(leadId) { const snapshot = await getDocs(query(collection(db, "activities"), where("leadId", "==", leadId))); return snapshot.docs.map(mapDocument).sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)); }
+export async function getLeadActivities(leadId, { pageSize = 30, cursor = null } = {}) {
+  const constraints = [where("leadId", "==", leadId), orderBy("createdAt", "desc")];
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(pageSize + 1));
+  const snapshot = await getDocs(query(collection(db, "activities"), ...constraints));
+  const hasMore = snapshot.docs.length > pageSize;
+  const pageDocs = snapshot.docs.slice(0, pageSize);
+  return {
+    items: pageDocs.map(mapDocument),
+    cursor: pageDocs.at(-1) || null,
+    hasMore
+  };
+}
 export function getLeadErrorMessage(error) { const messages = { AUTH_REQUIRED: "La sessió ha caducat. Torna a iniciar sessió.", FIRST_NAME_REQUIRED: "Introdueix el nom de la futura viatgera.", ENTRY_SOURCE_REQUIRED: "Selecciona el canal d'entrada abans de guardar.", INVALID_CONTACT_DATE: "Alguna de les dates indicades no és vàlida.", ENTRY_DATE_FUTURE: "La data d'entrada no pot ser posterior a avui.", LAST_CONTACT_DATE_FUTURE: "La data de l'últim contacte no pot ser posterior a avui.", CONTACT_DATE_ORDER: "L'últim contacte no pot ser anterior a la data d'entrada.", "permission-denied": "No tens permisos per crear o modificar aquest lead.", unavailable: "No s'ha pogut connectar amb Firestore. Revisa la connexió." }; return messages[error?.message] ?? messages[error?.code] ?? "No s'ha pogut completar l'operació."; }
