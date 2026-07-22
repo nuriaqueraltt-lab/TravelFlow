@@ -4,6 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
+import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
 let clientsCache = null;
 let clientsCacheComplete = false;
@@ -134,9 +135,9 @@ function normalizePayments(payments = []) {
   const ids = new Set();
   return payments.map((payment) => {
     const id = clean(payment.id); const amount = Number(payment.amount); const paidAt = clean(payment.paidAt);
-    const method = clean(payment.method || "TRANSFER"); const reference = clean(payment.reference).slice(0, 160);
+    const method = clean(payment.method || "TRANSFER_DEPOSIT"); const reference = clean(payment.reference).slice(0, 160);
     if (!id || ids.has(id) || !paidAt || !Number.isFinite(amount) || amount <= 0 || amount > 1000000) throw new Error("PAYMENTS_INVALID");
-    if (!["TRANSFER", "CARD", "CASH", "OTHER"].includes(method)) throw new Error("PAYMENTS_INVALID");
+    if (![...Object.keys(PAYMENT_METHODS), ...Object.keys(LEGACY_PAYMENT_METHODS)].includes(method)) throw new Error("PAYMENTS_INVALID");
     ids.add(id);
     return { id, amount: Math.round(amount * 100) / 100, paidAt, method, reference };
   });

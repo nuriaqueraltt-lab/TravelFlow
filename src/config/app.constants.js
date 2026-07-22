@@ -6,6 +6,25 @@ export const USER_ROLES = Object.freeze({
   AGENT: "AGENT"
 });
 
+export const PAYMENT_METHODS = Object.freeze({
+  TRANSFER_DEPOSIT: "Transferència Dipòsit",
+  TRANSFER_SL: "Transferència SL",
+  BIZUM: "Bizum",
+  CARD_SL: "Targeta SL",
+  CARD_DEPOSIT: "Targeta Dipòsit",
+  WEB_RESERVATION: "Reserva Web",
+  WISE: "Wise",
+  CASHIER_DEPOSIT: "Ingrés Caixer",
+  CASH: "Efectiu"
+});
+
+export const LEGACY_PAYMENT_METHODS = Object.freeze({
+  TRANSFER: "Transferència",
+  CARD: "Targeta",
+  DIRECT_DEBIT: "Domiciliació",
+  OTHER: "Altres"
+});
+
 export const LEAD_STATUSES = Object.freeze({
   NEW: "NEW",
   INFO_SENT: "INFO_SENT",

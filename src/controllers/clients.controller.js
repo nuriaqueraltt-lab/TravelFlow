@@ -1,5 +1,6 @@
 import { getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById } from "../services/trip.service.js";
+import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
 const appContent = () => document.querySelector(".app-content");
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -82,8 +83,13 @@ function reservationConcepts(reservation, trip) {
   return rows;
 }
 
-const paymentMethods = { TRANSFER: "Transferència", CARD: "Targeta", CASH: "Efectiu", OTHER: "Altres" };
-function paymentRow(payment = {}) { const id = payment.id || `payment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; return `<div class="client-payment-row" data-payment-row><input type="hidden" name="paymentId" value="${esc(id)}"><label><span>Data</span><input name="paymentDate" type="date" required value="${esc(payment.paidAt || "")}"></label><label><span>Import</span><span class="client-payment-amount"><input name="paymentAmount" type="number" min="0.01" step="0.01" required value="${payment.amount || ""}"><i>€</i></span></label><label><span>Forma de pagament</span><select name="paymentMethod">${Object.entries(paymentMethods).map(([key, label]) => `<option value="${key}" ${payment.method === key ? "selected" : ""}>${label}</option>`).join("")}</select></label><label><span>Referència / nota</span><input name="paymentReference" maxlength="160" value="${esc(payment.reference || "")}" placeholder="Ex. Reserva 150 €"></label><button type="button" data-remove-payment aria-label="Eliminar pagament">Eliminar</button></div>`; }
+function paymentMethodOptions(selectedMethod = "") {
+  const legacyOption = LEGACY_PAYMENT_METHODS[selectedMethod]
+    ? `<option value="${selectedMethod}" selected>${LEGACY_PAYMENT_METHODS[selectedMethod]} (anterior)</option>`
+    : "";
+  return legacyOption + Object.entries(PAYMENT_METHODS).map(([key, label]) => `<option value="${key}" ${selectedMethod === key ? "selected" : ""}>${label}</option>`).join("");
+}
+function paymentRow(payment = {}) { const id = payment.id || `payment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; return `<div class="client-payment-row" data-payment-row><input type="hidden" name="paymentId" value="${esc(id)}"><label><span>Data</span><input name="paymentDate" type="date" required value="${esc(payment.paidAt || "")}"></label><label><span>Import</span><span class="client-payment-amount"><input name="paymentAmount" type="number" min="0.01" step="0.01" required value="${payment.amount || ""}"><i>€</i></span></label><label><span>Forma de pagament</span><select name="paymentMethod">${paymentMethodOptions(payment.method)}</select></label><label><span>Referència / nota</span><input name="paymentReference" maxlength="160" value="${esc(payment.reference || "")}" placeholder="Ex. Reserva 150 €"></label><button type="button" data-remove-payment aria-label="Eliminar pagament">Eliminar</button></div>`; }
 
 function renderReservation(client, reservation, trip) {
   const concepts = reservationConcepts(reservation, trip);
@@ -119,7 +125,7 @@ document.addEventListener("click", (event) => {
   if (reservation) { const form = reservation.closest(".client-detail-page")?.querySelector("#clientForm"); showReservation(form?.dataset.clientId, reservation.dataset.clientReservation); return; }
   if (event.target.closest("[data-back-clients]")) showClientsView();
   if (event.target.closest("[data-back-client-detail]")) { showDetail(event.target.closest(".client-reservation-page")?.querySelector("#clientReservationForm")?.dataset.clientId); return; }
-  if (event.target.closest("[data-add-payment]")) { const list = document.querySelector("[data-payments-list]"); list?.querySelector("[data-no-payments]")?.remove(); list?.insertAdjacentHTML("beforeend", paymentRow({ paidAt: new Date().toISOString().slice(0, 10), method: "TRANSFER" })); return; }
+  if (event.target.closest("[data-add-payment]")) { const list = document.querySelector("[data-payments-list]"); list?.querySelector("[data-no-payments]")?.remove(); list?.insertAdjacentHTML("beforeend", paymentRow({ paidAt: new Date().toISOString().slice(0, 10), method: "TRANSFER_DEPOSIT" })); return; }
   const removePayment = event.target.closest("[data-remove-payment]");
   if (removePayment) { removePayment.closest("[data-payment-row]")?.remove(); refreshReservationTotals(); }
 });

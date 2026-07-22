@@ -2,6 +2,7 @@ import { getLeadsByTrip } from "../services/lead.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTripErrorMessage, TRIP_PROCESS_STEPS, updateTripOperations, updateTripPricing, updateTripSupplierPayments } from "../services/trip.service.js";
 import { getTripInterestStatus } from "../services/trip-interest.model.js";
 import { getClients } from "../services/client.service.js";
+import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
 let currentTrip = null;
 let currentTripLeads = [];
@@ -205,7 +206,14 @@ function getSupplierPayments(trip) {
 }
 
 function paymentMethodLabel(method) {
-  return { TRANSFER: "Transferència", CARD: "Targeta", CASH: "Efectiu", DIRECT_DEBIT: "Domiciliació", OTHER: "Altres" }[method] || "Altres";
+  return PAYMENT_METHODS[method] || LEGACY_PAYMENT_METHODS[method] || "Altres";
+}
+
+function paymentMethodOptions(selectedMethod = "") {
+  const legacyOption = LEGACY_PAYMENT_METHODS[selectedMethod]
+    ? `<option value="${selectedMethod}" selected>${LEGACY_PAYMENT_METHODS[selectedMethod]} (anterior)</option>`
+    : "";
+  return legacyOption + Object.entries(PAYMENT_METHODS).map(([key, label]) => `<option value="${key}" ${selectedMethod === key ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function renderSuppliersView(trip, message = "", editingId = "") {
@@ -222,7 +230,7 @@ function renderSuppliersView(trip, message = "", editingId = "") {
           <label class="form-field"><span>Concepte</span><input name="concept" maxlength="180" required value="${escapeHtml(editing?.concept || "")}" placeholder="Hotel, vols, assegurança..."></label>
           <label class="form-field"><span>Data de pagament</span><input name="paymentDate" type="date" required value="${editing?.paymentDate || new Date().toISOString().slice(0, 10)}"></label>
           <label class="form-field"><span>Import pagat</span><input name="amount" type="number" min="0.01" max="1000000" step="0.01" required value="${editing?.amount || ""}" placeholder="0,00"></label>
-          <label class="form-field"><span>Forma de pagament</span><select name="paymentMethod"><option value="TRANSFER" ${editing?.paymentMethod === "TRANSFER" ? "selected" : ""}>Transferència</option><option value="CARD" ${editing?.paymentMethod === "CARD" ? "selected" : ""}>Targeta</option><option value="DIRECT_DEBIT" ${editing?.paymentMethod === "DIRECT_DEBIT" ? "selected" : ""}>Domiciliació</option><option value="CASH" ${editing?.paymentMethod === "CASH" ? "selected" : ""}>Efectiu</option><option value="OTHER" ${editing?.paymentMethod === "OTHER" ? "selected" : ""}>Altres</option></select></label>
+          <label class="form-field"><span>Forma de pagament</span><select name="paymentMethod">${paymentMethodOptions(editing?.paymentMethod)}</select></label>
           <label class="form-field"><span>Referència o factura</span><input name="reference" maxlength="180" value="${escapeHtml(editing?.reference || "")}" placeholder="Opcional"></label>
         </div>
         <div class="trip-supplier-form-actions">${editing ? '<button class="secondary-button" type="button" data-cancel-supplier-edit>Cancel·lar</button>' : ""}<p class="quick-lead-form__message ${message ? "is-success" : ""}" id="tripSupplierPaymentMessage">${escapeHtml(message)}</p><button class="primary-button primary-button--compact" type="submit">${editing ? "Guardar canvis" : "Registrar pagament"}</button></div>

@@ -15,6 +15,7 @@ import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { activateTripInformationFollowUps } from "./trip-interest-followup.service.js";
 import { INITIAL_TRIP_TAGS } from "../data/trip-tags.seed.js";
+import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
 const CACHE_TTL = 5 * 60 * 1000;
 const SEED_SESSION_KEY = "travelflow:trip-catalogue-checked";
@@ -305,7 +306,7 @@ export async function updateTripSupplierPayments(tripId, supplierPayments = []) 
   if (!Array.isArray(supplierPayments) || supplierPayments.length > 200) throw new Error("SUPPLIER_PAYMENTS_INVALID");
 
   const ids = new Set();
-  const paymentMethods = new Set(["TRANSFER", "CARD", "CASH", "DIRECT_DEBIT", "OTHER"]);
+  const paymentMethods = new Set([...Object.keys(PAYMENT_METHODS), ...Object.keys(LEGACY_PAYMENT_METHODS)]);
   const normalizedPayments = supplierPayments.map((payment) => {
     const id = String(payment.id || "").trim();
     const supplierName = String(payment.supplierName || "").trim();
