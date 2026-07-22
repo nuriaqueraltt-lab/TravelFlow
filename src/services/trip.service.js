@@ -209,11 +209,8 @@ function reservationTotal(concepts) {
 }
 
 async function syncLinkedReservationPrices(tripId, catalogue, userId) {
-  const [clientsSnapshot, leadsSnapshot] = await Promise.all([
-    getDocs(collection(db, "clients")),
-    getDocs(collection(db, "leads"))
-  ]);
-  const leadChanges = new Map();
+  const clientsSnapshot = await getDocs(collection(db, "clients"));
+  const linkedReservationsByLead = new Map();
   const writes = [];
 
   clientsSnapshot.docs.forEach((clientDocument) => {
@@ -227,17 +224,29 @@ async function syncLinkedReservationPrices(tripId, catalogue, userId) {
     writes.push({ ref: clientDocument.ref, data: { reservations: { ...(client.reservations || {}), [tripId]: reservation }, updatedBy: userId, updatedAt: serverTimestamp() } });
 
     if (current.leadId) {
-      const leadDocument = leadsSnapshot.docs.find((item) => item.id === current.leadId);
-      if (leadDocument) {
-        const base = leadChanges.get(current.leadId) || leadDocument.data();
-        const tripInterests = { ...(base.tripInterests || {}) };
-        tripInterests[tripId] = { ...(tripInterests[tripId] || {}), pricingMode: "TRIP", bookingPriceConcepts: priceConcepts, bookingTotal: total, totalPaid };
-        leadChanges.set(current.leadId, { ...base, tripInterests });
-      }
+      linkedReservationsByLead.set(current.leadId, { priceConcepts, total, totalPaid });
     }
   });
 
-  leadChanges.forEach((lead, leadId) => writes.push({ ref: doc(db, "leads", leadId), data: { tripInterests: lead.tripInterests, updatedBy: userId, updatedAt: serverTimestamp() } }));
+  const linkedLeads = await Promise.all(
+    [...linkedReservationsByLead.keys()].map(async (leadId) => {
+      const snapshot = await getDoc(doc(db, "leads", leadId));
+      return snapshot.exists() ? { id: leadId, data: snapshot.data() } : null;
+    })
+  );
+
+  linkedLeads.filter(Boolean).forEach(({ id: leadId, data: lead }) => {
+    const reservation = linkedReservationsByLead.get(leadId);
+    const tripInterests = { ...(lead.tripInterests || {}) };
+    tripInterests[tripId] = {
+      ...(tripInterests[tripId] || {}),
+      pricingMode: "TRIP",
+      bookingPriceConcepts: reservation.priceConcepts,
+      bookingTotal: reservation.total,
+      totalPaid: reservation.totalPaid
+    };
+    writes.push({ ref: doc(db, "leads", leadId), data: { tripInterests, updatedBy: userId, updatedAt: serverTimestamp() } });
+  });
   for (let index = 0; index < writes.length; index += 400) {
     const batch = writeBatch(db);
     writes.slice(index, index + 400).forEach((write) => batch.update(write.ref, write.data));
