@@ -80,18 +80,18 @@ export async function getLeadTasks(leadId, { force = false } = {}) {
   return request;
 }
 
-export async function processClosedTrips({ trips: suppliedTrips = null, leads: suppliedLeads = null } = {}) {
+export async function processClosedTrips({ trips: suppliedTrips = null, leads: suppliedLeads = null, pendingTasks: suppliedPendingTasks = null } = {}) {
   const user = getCurrentUser();
   if (!user) return 0;
-  const [trips, leads, pendingTasksSnapshot] = await Promise.all([
+  const [trips, leads, pendingTasks] = await Promise.all([
     suppliedTrips ? Promise.resolve(suppliedTrips) : getTrips(),
     suppliedLeads ? Promise.resolve(suppliedLeads) : getDocs(collection(db, "leads")).then((snapshot) => snapshot.docs.map(mapDocument)),
-    getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)))
+    suppliedPendingTasks ? Promise.resolve(suppliedPendingTasks) : loadOpenTasks()
   ]);
   const today = todayIso();
   const closedTrips = trips.filter((trip) => trip.closingDate && trip.closingDate <= today);
   if (!closedTrips.length) return 0;
-  const pendingKeys = new Set(pendingTasksSnapshot.docs.map((item) => { const task = item.data(); return `${task.leadId}|${task.tripId}|${task.type}`; }));
+  const pendingKeys = new Set(pendingTasks.map((task) => `${task.leadId}|${task.tripId}|${task.type}`));
   const activeLeads = leads.filter((lead) => lead.active !== false && ![LEAD_STATUSES.LOST, LEAD_STATUSES.BOOKING_CONFIRMED].includes(lead.status));
   const operations = [];
   closedTrips.forEach((trip) => {
@@ -114,28 +114,28 @@ export async function processClosedTrips({ trips: suppliedTrips = null, leads: s
   return operations.length;
 }
 
-export async function getOpenTasks({ leads = null, trips = null, runMaintenance = true, force = false } = {}) {
-  if (runMaintenance && shouldRunMaintenance()) {
-    await processClosedTrips({ leads, trips });
-    sessionStorage.setItem(MAINTENANCE_KEY, String(Date.now()));
-  }
+async function loadOpenTasks({ force = false } = {}) {
+  if (!force && openTasksCache && Date.now() - openTasksCacheAt < TASK_CACHE_TTL) return openTasksCache;
+  if (!force && openTasksRequest) return openTasksRequest;
 
-  let tasks;
-  if (!force && openTasksCache && Date.now() - openTasksCacheAt < TASK_CACHE_TTL) {
-    tasks = openTasksCache;
-  } else {
-    if (!force && openTasksRequest) {
-      tasks = await openTasksRequest;
-    } else {
-      openTasksRequest = getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)))
-        .then((snapshot) => {
-          openTasksCache = sortTasks(snapshot.docs.map(mapDocument));
-          openTasksCacheAt = Date.now();
-          return openTasksCache;
-        })
-        .finally(() => { openTasksRequest = null; });
-      tasks = await openTasksRequest;
-    }
+  openTasksRequest = getDocs(query(collection(db, "tasks"), where("status", "==", TASK_STATUSES.PENDING)))
+    .then((snapshot) => {
+      openTasksCache = sortTasks(snapshot.docs.map(mapDocument));
+      openTasksCacheAt = Date.now();
+      return openTasksCache;
+    })
+    .finally(() => { openTasksRequest = null; });
+
+  return openTasksRequest;
+}
+
+export async function getOpenTasks({ leads = null, trips = null, runMaintenance = true, force = false } = {}) {
+  let tasks = await loadOpenTasks({ force });
+
+  if (runMaintenance && shouldRunMaintenance()) {
+    const created = await processClosedTrips({ leads, trips, pendingTasks: tasks });
+    sessionStorage.setItem(MAINTENANCE_KEY, String(Date.now()));
+    if (created) tasks = await loadOpenTasks({ force: true });
   }
 
   let existing;
