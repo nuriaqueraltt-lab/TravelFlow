@@ -132,6 +132,8 @@
 .client-match-row strong { margin-top: 7px; color: #2f463b; }
 .client-match-row small { margin-top: 3px; color: #718078; }
 .client-match-row button { margin-top: 8px; padding: 0; border: 0; background: transparent; color: #526d5e; font-weight: 850; cursor: pointer; }
+.client-match-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.client-match-actions button { margin: 0; padding: 8px 12px; }
 .client-match-arrow { color: #9b8366; font-weight: 900; text-align: center; }
 .client-match-confidence, .client-match-reasons { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: .7rem; font-weight: 850; }
 .client-match-confidence.is-high { background: #e8f4ec; color: #2f704d; }

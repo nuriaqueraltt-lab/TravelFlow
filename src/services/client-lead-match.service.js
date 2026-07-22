@@ -42,6 +42,7 @@ export function findUnlinkedLeadClientMatches(leads = [], clients = []) {
 
   const matches = [];
   leads.filter((lead) => lead.active !== false && !clean(lead.clientId)).forEach((lead) => {
+    const rejectedClientIds = new Set(Array.isArray(lead.rejectedClientMatchIds) ? lead.rejectedClientMatchIds : []);
     const leadEmails = emailKeys(lead.email);
     const leadPhones = phoneKeys(lead.phone);
     const leadName = normalizeName(lead.fullName || [lead.firstName, lead.lastName].filter(Boolean).join(" "));
@@ -52,6 +53,7 @@ export function findUnlinkedLeadClientMatches(leads = [], clients = []) {
     if (!candidates.size && leadName) (nameIndex.get(leadName) || []).forEach((client) => candidates.set(client.id, client));
 
     candidates.forEach((client) => {
+      if (rejectedClientIds.has(client.id)) return;
       const emails = sharedValues(leadEmails, emailKeys(client.email));
       const phones = sharedValues(leadPhones, phoneKeys(client.phone));
       const sameName = Boolean(leadName && leadName === normalizeName(client.fullName));

@@ -1,4 +1,4 @@
-import { collection, deleteField, doc, getDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 import { ACTIVITY_TYPES, FOLLOW_UP_DEFAULTS, LEAD_PRIORITIES, LEAD_STATUSES, LEAD_TEMPERATURES, TASK_STATUSES, TASK_TYPES } from "../config/app.constants.js";
@@ -131,6 +131,28 @@ export async function updateLead(leadId, input, currentLead = {}) {
   batch.set(doc(collection(db, "activities")), { leadId, type: ACTIVITY_TYPES.NOTE, description: "Dades i etiquetes de la futura viatgera actualitzades.", createdBy: currentUser.uid, createdAt: serverTimestamp() });
   taskSnapshot.docs.forEach((taskDoc) => batch.update(taskDoc.ref, { leadName: fullName, tripName: tripLabels[0] || "", updatedAt: serverTimestamp() }));
   await batch.commit();
+}
+
+export async function linkLeadToClient(leadId, client) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (!leadId || !client?.id) throw new Error("INVALID_CLIENT_LINK");
+  const leadRef = doc(db, "leads", leadId);
+  const snapshot = await getDoc(leadRef);
+  if (!snapshot.exists()) throw new Error("LEAD_NOT_FOUND");
+  if (snapshot.data().clientId && snapshot.data().clientId !== client.id) throw new Error("LEAD_ALREADY_LINKED");
+  const update = { clientId: client.id, clientNameSnapshot: client.fullName || "", clientLinkedAt: serverTimestamp(), clientLinkedBy: currentUser.uid, updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
+  await updateDoc(leadRef, update);
+  upsertLeadCache({ id: leadId, ...update });
+}
+
+export async function rejectLeadClientMatch(leadId, clientId) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) throw new Error("AUTH_REQUIRED");
+  if (!leadId || !clientId) throw new Error("INVALID_CLIENT_LINK");
+  const update = { rejectedClientMatchIds: arrayUnion(clientId), updatedBy: currentUser.uid, updatedAt: serverTimestamp() };
+  await updateDoc(doc(db, "leads", leadId), update);
+  invalidateLeadsCache();
 }
 
 export async function getLeads({ force = false } = {}) { if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache; if (!force && leadsRequest) return leadsRequest; leadsRequest = getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc"))).then((snapshot) => setLeadsCache(snapshot.docs.map(mapDocument))).finally(() => { leadsRequest = null; }); return leadsRequest; }

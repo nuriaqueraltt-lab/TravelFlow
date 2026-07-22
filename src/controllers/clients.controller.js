@@ -3,7 +3,7 @@ import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
 import { importApprovedClients } from "../services/client-import.service.js";
-import { getLeads } from "../services/lead.service.js";
+import { getLeads, linkLeadToClient, rejectLeadClientMatch } from "../services/lead.service.js";
 import { findUnlinkedLeadClientMatches } from "../services/client-lead-match.service.js";
 import { showLeadDetail } from "./leads.controller.js";
 
@@ -43,7 +43,7 @@ function renderLinkNotice(matches) {
 }
 
 function renderMatchesModal(matches) {
-  const rows = matches.map((match) => `<article class="client-match-row"><div><span class="client-match-confidence is-${match.confidence.toLowerCase()}">${match.confidence === "HIGH" ? "Coincidència alta" : "Cal revisar"}</span><strong>${esc(match.lead.fullName || "Lead sense nom")}</strong><small>Lead · ${esc(match.lead.email || match.lead.phone || "Sense contacte")}</small><button type="button" data-open-matched-lead="${esc(match.lead.id)}">Obrir lead →</button></div><span class="client-match-arrow">↔</span><div><span class="client-match-reasons">Mateix ${esc(match.reasons.join(" i "))}${match.ambiguous ? " · diverses candidates" : ""}</span><strong>${esc(match.client.fullName || "Clienta sense nom")}</strong><small>Clienta · ${esc(match.client.email || match.client.phone || "Sense contacte")}</small><button type="button" data-open-matched-client="${esc(match.client.id)}">Obrir clienta →</button></div></article>`).join("");
+  const rows = matches.map((match) => `<article class="client-match-row"><div><span class="client-match-confidence is-${match.confidence.toLowerCase()}">${match.confidence === "HIGH" ? "Coincidència alta" : "Cal revisar"}</span><strong>${esc(match.lead.fullName || "Lead sense nom")}</strong><small>Lead · ${esc(match.lead.email || match.lead.phone || "Sense contacte")}</small><button type="button" data-open-matched-lead="${esc(match.lead.id)}">Obrir lead →</button></div><span class="client-match-arrow">↔</span><div><span class="client-match-reasons">Mateix ${esc(match.reasons.join(" i "))}${match.ambiguous ? " · diverses candidates" : ""}</span><strong>${esc(match.client.fullName || "Clienta sense nom")}</strong><small>Clienta · ${esc(match.client.email || match.client.phone || "Sense contacte")}</small><button type="button" data-open-matched-client="${esc(match.client.id)}">Obrir clienta →</button><div class="client-match-actions"><button class="primary-button primary-button--compact" type="button" data-link-match data-lead-id="${esc(match.lead.id)}" data-client-id="${esc(match.client.id)}" data-client-name="${esc(match.client.fullName || "")}">Vincular</button><button class="secondary-button" type="button" data-reject-match data-lead-id="${esc(match.lead.id)}" data-client-id="${esc(match.client.id)}">No hi ha vincle</button></div></div></article>`).join("");
   return `<div class="client-matches-modal" data-client-matches-modal><button class="client-matches-modal__backdrop" type="button" data-close-client-matches aria-label="Tancar"></button><section class="client-matches-panel" role="dialog" aria-modal="true" aria-labelledby="clientMatchesTitle"><header><div><span class="section-kicker">Revisió manual</span><h2 id="clientMatchesTitle">Possibles leads i clientes iguals</h2><p>Només es mostren leads actius que encara no tenen cap clienta vinculada.</p></div><button type="button" data-close-client-matches aria-label="Tancar">×</button></header><div class="client-match-list">${rows}</div><footer><p>No s’ha fet cap vinculació automàtica.</p><button class="secondary-button" type="button" data-close-client-matches>Tancar</button></footer></section></div>`;
 }
 
@@ -215,6 +215,26 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-close-client-matches]")) { document.querySelector("[data-client-matches-modal]")?.remove(); return; }
+  const linkMatch = event.target.closest("[data-link-match]");
+  if (linkMatch) {
+    if (!window.confirm(`Vols vincular aquest lead amb ${linkMatch.dataset.clientName || "aquesta clienta"}? No s'eliminarà ni es copiarà cap dada.`)) return;
+    linkMatch.disabled = true;
+    linkLeadToClient(linkMatch.dataset.leadId, { id: linkMatch.dataset.clientId, fullName: linkMatch.dataset.clientName }).then(() => {
+      document.querySelector("[data-client-matches-modal]")?.remove();
+      showClientsView();
+    }).catch((error) => { console.error("No s'ha pogut vincular el lead", error); linkMatch.disabled = false; window.alert("No s'ha pogut fer la vinculació. Torna-ho a provar."); });
+    return;
+  }
+  const rejectMatch = event.target.closest("[data-reject-match]");
+  if (rejectMatch) {
+    if (!window.confirm("Confirmes que aquestes dues persones no són la mateixa? Aquesta coincidència no tornarà a aparèixer.")) return;
+    rejectMatch.disabled = true;
+    rejectLeadClientMatch(rejectMatch.dataset.leadId, rejectMatch.dataset.clientId).then(() => {
+      document.querySelector("[data-client-matches-modal]")?.remove();
+      showClientsView();
+    }).catch((error) => { console.error("No s'ha pogut descartar la coincidència", error); rejectMatch.disabled = false; window.alert("No s'ha pogut guardar la decisió. Torna-ho a provar."); });
+    return;
+  }
   const matchedLead = event.target.closest("[data-open-matched-lead]");
   if (matchedLead) { document.querySelector("[data-client-matches-modal]")?.remove(); showLeadDetail(matchedLead.dataset.openMatchedLead); return; }
   const matchedClient = event.target.closest("[data-open-matched-client]");
