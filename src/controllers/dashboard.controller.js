@@ -2,7 +2,7 @@ import { getOpenTasks } from "../services/workflow.service.js";
 import { getTrips } from "../services/trip.service.js";
 import { getLeads } from "../services/lead.service.js";
 import { showLeadDetail } from "./leads.controller.js";
-import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260721-2";
+import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260721-3";
 import { getTripInterestStatus, hasActiveTripInterests, isBookedForTrip, TRIP_INTEREST_TERMINAL_STATUSES } from "../services/trip-interest.model.js";
 
 const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
