@@ -121,7 +121,8 @@ function normalizeReservationConcepts(concepts = []) {
   return concepts.map((concept, index) => {
     const id = clean(concept.id); const name = clean(concept.name); const amount = Number(concept.amount);
     const application = clean(concept.application || "OPTIONAL"); const priceStatus = clean(concept.priceStatus || "FINAL");
-    if (!id || ids.has(id) || !name || !Number.isFinite(amount) || amount < 0 || amount > 1000000) throw new Error("RESERVATION_INVALID");
+    const minimumAmount = id === "loyalty-discount" ? -1000000 : 0;
+    if (!id || ids.has(id) || !name || !Number.isFinite(amount) || amount < minimumAmount || amount > 1000000) throw new Error("RESERVATION_INVALID");
     if (!["REQUIRED", "OPTIONAL", "INFORMATIONAL"].includes(application) || !["FINAL", "ESTIMATED"].includes(priceStatus)) throw new Error("RESERVATION_INVALID");
     ids.add(id);
     return { id, name, amount: Math.round(amount * 100) / 100, application, priceStatus, order: index };

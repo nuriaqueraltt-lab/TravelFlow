@@ -36,7 +36,8 @@ export const DEFAULT_TRIP_PRICE_CONCEPTS = [
   { id: "international-flights", name: "Vols internacionals", amount: 0, application: "OPTIONAL", priceStatus: "ESTIMATED" },
   { id: "domestic-flights", name: "Vols interns", amount: 0, application: "OPTIONAL", priceStatus: "ESTIMATED" },
   { id: "shared-double-room", name: "Habitació doble compartida", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" },
-  { id: "single-room-supplement", name: "Suplement habitació individual", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" }
+  { id: "single-room-supplement", name: "Suplement habitació individual", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" },
+  { id: "loyalty-discount", name: "Descompte fidelitat", amount: 0, application: "OPTIONAL", priceStatus: "FINAL" }
 ];
 const TRIP_GROUP_STATUSES = ["AVAILABLE", "CONFIRMED", "FULL"];
 const TRIP_PRICE_APPLICATIONS = ["REQUIRED", "OPTIONAL", "INFORMATIONAL"];
@@ -169,7 +170,8 @@ export async function updateTripPricing(tripId, priceConcepts = []) {
     const amount = Number(concept.amount);
     const application = String(concept.application || "OPTIONAL");
     const priceStatus = String(concept.priceStatus || "FINAL");
-    if (!id || ids.has(id) || !name || name.length > 120 || !Number.isFinite(amount) || amount < 0 || amount > 1000000) {
+    const minimumAmount = id === "loyalty-discount" ? -1000000 : 0;
+    if (!id || ids.has(id) || !name || name.length > 120 || !Number.isFinite(amount) || amount < minimumAmount || amount > 1000000) {
       throw new Error("TRIP_PRICING_INVALID");
     }
     if (!TRIP_PRICE_APPLICATIONS.includes(application) || !TRIP_PRICE_STATUSES.includes(priceStatus)) {

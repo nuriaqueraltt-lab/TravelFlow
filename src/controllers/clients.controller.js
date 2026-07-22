@@ -73,7 +73,9 @@ async function showDetail(clientId) {
 function reservationConcepts(reservation, trip) {
   const saved = Array.isArray(reservation.priceConcepts) ? reservation.priceConcepts : [];
   const selected = new Map(saved.map((item) => [item.id, item]));
-  const catalogue = Array.isArray(trip?.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS;
+  const catalogue = Array.isArray(trip?.priceConcepts) ? [...trip.priceConcepts] : [...DEFAULT_TRIP_PRICE_CONCEPTS];
+  const loyaltyDiscount = DEFAULT_TRIP_PRICE_CONCEPTS.find((concept) => concept.id === "loyalty-discount");
+  if (loyaltyDiscount && !catalogue.some((concept) => concept.id === loyaltyDiscount.id)) catalogue.push({ ...loyaltyDiscount });
   const linked = reservation.pricingMode === "TRIP";
   const rows = catalogue.map((item) => ({ ...(linked ? (selected.get(item.id) || {}) : item), ...(linked ? item : (selected.get(item.id) || {})), tripAmount: item.amount, selected: item.application === "REQUIRED" || selected.has(item.id) }));
   saved.filter((item) => !rows.some((row) => row.id === item.id)).forEach((item) => rows.push({ ...item, selected: true }));
@@ -96,6 +98,8 @@ async function showReservation(clientId, tripId) {
   if (!client || !reservation) return showClientsView();
   let trip = null; try { trip = await getTripById(tripId); } catch { /* La instantània permet editar encara que el viatge ja no sigui actiu. */ }
   appContent().innerHTML = renderReservation(client, reservation, trip);
+  const loyaltyDiscountAmount = appContent().querySelector('input[name="reservationConcept"][value="loyalty-discount"]')?.closest(".client-reservation-concept")?.querySelector('[name="reservationConceptAmount"]');
+  if (loyaltyDiscountAmount) loyaltyDiscountAmount.min = "-1000000";
 }
 
 document.addEventListener("input", (event) => {

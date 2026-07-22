@@ -40,7 +40,9 @@ function formatCurrency(value) { return new Intl.NumberFormat("ca-ES", { style: 
 
 function bookingConceptsForTrip(lead, tripId) {
   const trip = tripsCache.find((item) => item.id === tripId);
-  const catalogue = Array.isArray(trip?.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS;
+  const catalogue = Array.isArray(trip?.priceConcepts) ? [...trip.priceConcepts] : [...DEFAULT_TRIP_PRICE_CONCEPTS];
+  const loyaltyDiscount = DEFAULT_TRIP_PRICE_CONCEPTS.find((concept) => concept.id === "loyalty-discount");
+  if (loyaltyDiscount && !catalogue.some((concept) => concept.id === loyaltyDiscount.id)) catalogue.push({ ...loyaltyDiscount });
   const saved = Array.isArray(lead?.tripInterests?.[tripId]?.bookingPriceConcepts) ? lead.tripInterests[tripId].bookingPriceConcepts : [];
   const savedById = new Map(saved.map((concept) => [concept.id, concept]));
   const concepts = catalogue.map((concept) => savedById.get(concept.id) || concept);

@@ -233,7 +233,9 @@ function renderSuppliersView(trip, message = "", editingId = "") {
 }
 
 function getPriceConcepts(trip) {
-  const concepts = Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS;
+  const concepts = Array.isArray(trip.priceConcepts) ? [...trip.priceConcepts] : [...DEFAULT_TRIP_PRICE_CONCEPTS];
+  const loyaltyDiscount = DEFAULT_TRIP_PRICE_CONCEPTS.find((concept) => concept.id === "loyalty-discount");
+  if (loyaltyDiscount && !concepts.some((concept) => concept.id === loyaltyDiscount.id)) concepts.push({ ...loyaltyDiscount });
   return concepts.map((concept, index) => ({ ...concept, order: index }));
 }
 
@@ -245,7 +247,7 @@ function renderPriceRow(concept, index, total) {
     </div>
     <div class="trip-price-row__main">
       <label class="trip-price-row__name"><span>Concepte</span><input name="conceptName" maxlength="120" required value="${escapeHtml(concept.name)}" placeholder="Nom del concepte"></label>
-      <label class="trip-price-row__amount"><span>Import</span><span class="trip-price-amount"><input name="conceptAmount" type="number" min="0" max="1000000" step="0.01" required value="${Number(concept.amount) || 0}"><i>€</i></span></label>
+      <label class="trip-price-row__amount"><span>Import</span><span class="trip-price-amount"><input name="conceptAmount" type="number" min="${concept.id === "loyalty-discount" ? "-1000000" : "0"}" max="1000000" step="0.01" required value="${Number(concept.amount) || 0}"><i>€</i></span></label>
     </div>
     <div class="trip-price-row__settings">
       <label><span>Qui el contracta?</span><select name="conceptApplication"><option value="REQUIRED" ${concept.application === "REQUIRED" ? "selected" : ""}>Inclòs per a tothom</option><option value="OPTIONAL" ${concept.application === "OPTIONAL" ? "selected" : ""}>Selecció opcional</option><option value="INFORMATIONAL" ${concept.application === "INFORMATIONAL" ? "selected" : ""}>Només informatiu</option></select></label>
