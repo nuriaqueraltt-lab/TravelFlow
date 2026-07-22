@@ -60,13 +60,14 @@ function importStatus(status) {
 
 function renderImportPreview(preview) {
   const { totals, items } = preview;
+  const importableCount = items.filter((item) => item.status === "NEW" || item.reviewType === "DUPLICATE_IN_FILE").length;
   const value = (text) => esc(text || "—");
   const rows = items.map((item) => `<tr data-import-row data-status="${item.status}" data-search="${esc([item.fullName, item.dni, item.passport, item.phone, item.email, item.address, item.postalCode, item.city, item.province, item.country, item.reason].join(" ").toLowerCase())}"><td>${item.line}</td><td><strong>${value(item.fullName || "Sense nom")}</strong></td><td>${value(item.dni)}</td><td>${value(item.passport)}</td><td>${value(item.phone)}</td><td>${value(item.email)}</td><td>${value(item.address)}</td><td>${value(item.postalCode)}</td><td>${value(item.city)}</td><td>${value(item.province)}</td><td>${value(item.country)}</td><td>${item.superTraveler ? "Sí" : "No"}</td><td><span class="client-import-status is-${item.status.toLowerCase()}">${importStatus(item.status)}</span></td><td class="client-import-reason">${esc(item.reason)}</td></tr>`).join("");
   return `<div class="client-import-summary"><article><strong>${items.length}</strong><span>registres</span></article><article class="is-new"><strong>${totals.NEW}</strong><span>noves</span></article><article><strong>${totals.EXISTING}</strong><span>ja existents</span></article><article class="is-review"><strong>${totals.REVIEW + totals.INVALID}</strong><span>per revisar</span></article></div>
     <div class="client-import-tools"><label><span>Buscar</span><input type="search" placeholder="Nom, document, telèfon, població..." data-client-import-search></label><label><span>Mostrar</span><select data-client-import-filter><option value="ALL">Tots els registres</option><option value="REVIEW">Només per revisar</option><option value="NEW">Només noves</option><option value="EXISTING">Només existents</option></select></label><strong data-client-import-visible>${items.length} visibles</strong></div>
     <div class="client-import-table"><table><thead><tr><th>Línia</th><th>Nom i cognoms</th><th>DNI</th><th>Passaport</th><th>Telèfon</th><th>Correu</th><th>Adreça</th><th>CP</th><th>Població</th><th>Província</th><th>País</th><th>Superviatgera</th><th>Resultat</th><th>Motiu</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="client-import-limit">Es mostren els ${items.length} registres. Desplaça la taula horitzontalment per veure tots els camps.</p>
-    <div class="client-import-confirm"><p><strong>${totals.NEW + totals.REVIEW} clientes preparades per importar.</strong><span>Les ${totals.EXISTING} que ja existeixen no s’importaran. Les ${totals.REVIEW} que has revisat sí que s’inclouran.</span></p><button class="primary-button" type="button" data-confirm-client-import>Importar ${totals.NEW + totals.REVIEW} clientes</button></div>`;
+    <div class="client-import-confirm"><p><strong>${importableCount} clientes preparades per importar.</strong><span>Les ${totals.EXISTING} que ja existeixen no s’importaran. Els possibles duplicats interns que has revisat sí que s’inclouran.</span></p><button class="primary-button" type="button" data-confirm-client-import>Importar ${importableCount} clientes</button></div>`;
 }
 
 function filterImportRows(modal) {
@@ -197,6 +198,7 @@ document.addEventListener("click", (event) => {
   if (confirmImport) {
     const modal = confirmImport.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]");
     if (!pendingClientImportText || !message) return;
+    if (!window.confirm("Vols importar ara les clientes preparades? Les que ja existeixen no es modificaran.")) return;
     confirmImport.disabled = true; confirmImport.textContent = "Important clientes..."; message.textContent = "Guardant les clientes a TravelFlow. No tanquis aquesta finestra...";
     importApprovedClients(pendingClientImportText).then(async (result) => {
       pendingClientImportText = "";

@@ -44,7 +44,7 @@ export async function importApprovedClients(csvText) {
   const existingSnapshot = await getDocs(collection(db, "clients"));
   const existing = existingSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
   const preview = previewClientImport(csvText, existing);
-  const approved = preview.items.filter((item) => item.status === "NEW" || item.status === "REVIEW");
+  const approved = preview.items.filter((item) => item.status === "NEW" || item.reviewType === "DUPLICATE_IN_FILE");
 
   for (let offset = 0; offset < approved.length; offset += 400) {
     const batch = writeBatch(db);

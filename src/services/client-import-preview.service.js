@@ -102,8 +102,8 @@ export function previewClientImport(text, existingClients = []) {
     [["dni", documentKey(item.dni)], ["passport", documentKey(item.passport)], ["email", emailKey(item.email)], ["phone", phoneKey(item.phone)]].forEach(([field, key]) => {
       if (!key) return; if (seen[field].has(key)) repeated.push(seen[field].get(key)); else seen[field].set(key, item.line);
     });
-    if (matches.length > 1) return { ...item, status: "REVIEW", reason: "Les dades coincideixen amb més d’una clienta existent" };
-    if (repeated.length) return { ...item, status: "REVIEW", reason: `Possible duplicat dins del fitxer (línia ${repeated[0]})` };
+    if (matches.length > 1) return { ...item, status: "REVIEW", reviewType: "MULTIPLE_EXISTING", reason: "Les dades coincideixen amb més d’una clienta existent" };
+    if (repeated.length) return { ...item, status: "REVIEW", reviewType: "DUPLICATE_IN_FILE", reason: `Possible duplicat dins del fitxer (línia ${repeated[0]})` };
     if (matches.length === 1) return { ...item, status: "EXISTING", reason: `Ja existeix: ${matches[0].fullName || "clienta sense nom"}`, existingClientId: matches[0].id };
     return { ...item, status: "NEW", reason: "Preparada per importar" };
   });
