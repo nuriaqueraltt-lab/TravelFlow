@@ -11,7 +11,7 @@ const FIELD_ALIASES = {
   fullName: ["nomcognoms", "nombreapellidos", "client", "cliente", "clienta", "nomclient", "nombrecliente"],
   dni: ["dni", "nif", "nifcod", "document", "documentidentitat", "documento", "documentonif"],
   passport: ["passaport", "pasaporte"],
-  phone: ["telefon", "telefono", "telefonowhatsapp", "mobil", "movil", "whatsapp"],
+  phone: ["telefon", "telefono", "telefonowhatsapp", "tlf1", "telf1", "telefon1", "telefono1", "mobil", "movil", "whatsapp"],
   email: ["email", "correu", "correuelectronic", "correoelectronico", "mail"],
   address: ["adreca", "direccion", "domicili", "domicilio"],
   postalCode: ["codipostal", "codigopostal", "cp"],
