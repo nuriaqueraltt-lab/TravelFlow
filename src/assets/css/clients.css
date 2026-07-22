@@ -27,6 +27,12 @@
 .client-contact-action.is-disabled { opacity: .42; cursor: not-allowed; }
 .client-form select { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid #dfe5e1; border-radius: 12px; background: #fbfcfb; color: #263a30; }
 .client-form [hidden] { display: none; }
+.client-new-booking { margin: 0 0 18px; padding: 16px; border: 1px solid #e7ded8; border-radius: 14px; background: #fbf8f6; }
+.client-new-booking[hidden] { display: none; }
+.client-new-booking label { display: grid; gap: 7px; }
+.client-new-booking select { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #d9cec7; border-radius: 10px; background: #fff; }
+.client-new-booking > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.client-new-booking p, .client-booking-hint { margin: 8px 0 0; color: #786b65; font-size: .88rem; }
 
 /* Llistat de clientes en format taula */
 .clients-table-card {

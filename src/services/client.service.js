@@ -119,6 +119,61 @@ export async function updateClient(clientId, input) {
   return saved;
 }
 
+export async function createClientReservation(clientId, trip) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  if (!trip?.id || !trip?.name) throw new Error("RESERVATION_TRIP_REQUIRED");
+  const client = await getClient(clientId);
+  if (!client) throw new Error("CLIENT_NOT_FOUND");
+  if (client.reservations?.[trip.id]) throw new Error("RESERVATION_ALREADY_EXISTS");
+
+  const leadRef = doc(collection(db, "leads"));
+  const bookedAt = serverTimestamp();
+  const priceConcepts = normalizeReservationConcepts((trip.priceConcepts || []).filter((concept) => concept.application === "REQUIRED"));
+  const total = Math.round(priceConcepts.reduce((sum, concept) => concept.application === "INFORMATIONAL" ? sum : sum + concept.amount, 0) * 100) / 100;
+  const reservation = {
+    tripId: trip.id, tripName: trip.name, leadId: leadRef.id, status: "CONFIRMED", bookedAt,
+    priceConcepts, total, pricingMode: "TRIP", dui: false, roomType: "SHARED", roommate: "",
+    departureCity: "", notes: "", payments: [], totalPaid: 0, pendingAmount: Math.max(0, total), updatedAt: bookedAt
+  };
+  const tripInterest = {
+    tripId: trip.id, tripName: trip.name, status: "BOOKING_CONFIRMED", bookedAt, dui: false,
+    roomType: "SHARED", roommate: "", departureCity: "", bookingNotes: "", pricingMode: "TRIP",
+    bookingPriceConcepts: priceConcepts, bookingTotal: total, payments: [], totalPaid: 0
+  };
+  const nameParts = clean(client.fullName).split(/\s+/);
+  const firstName = nameParts.shift() || clean(client.fullName);
+  const lastName = nameParts.join(" ");
+  const lead = {
+    firstName, lastName, fullName: clean(client.fullName), fullNameSearch: clean(client.fullName).toLowerCase(),
+    phone: clean(client.phone), phoneNormalized: phoneKey(client.phone), email: emailKey(client.email),
+    instagramHandle: "", facebookUrl: "", channel: "OTHER", source: "RETURNING_CUSTOMER",
+    entryPreset: "", tripIds: [trip.id], tripLabels: [trip.name], tripInterests: { [trip.id]: tripInterest },
+    interest: trip.name, notes: "Reserva creada des de la fitxa de clienta.", status: "BOOKING_CONFIRMED",
+    priority: "NORMAL", temperature: "WARM", ownerId: user.uid, createdBy: user.uid, updatedBy: user.uid,
+    active: true, noResponseCount: 0, nextActionTitle: "", nextActionAt: null,
+    bookingTripId: trip.id, bookingTripNameSnapshot: trip.name, bookingDui: false, bookedAt,
+    clientId, createdAt: bookedAt, updatedAt: bookedAt
+  };
+
+  const batch = writeBatch(db);
+  batch.set(leadRef, lead);
+  batch.update(doc(db, "clients", clientId), {
+    leadIds: [...new Set([...(client.leadIds || []), leadRef.id])],
+    reservations: { ...(client.reservations || {}), [trip.id]: reservation },
+    updatedBy: user.uid, updatedAt: serverTimestamp()
+  });
+  batch.set(doc(collection(db, "activities")), {
+    leadId: leadRef.id, tripId: trip.id, type: "BOOKING_CONFIRMED",
+    description: `Reserva creada des de la fitxa de clienta · ${trip.name} · Total ${total.toLocaleString("ca-ES", { style: "currency", currency: "EUR" })}.`,
+    createdBy: user.uid, createdAt: serverTimestamp()
+  });
+  await batch.commit();
+  invalidateClientsCache();
+  window.dispatchEvent(new CustomEvent("travelflow:leads-updated"));
+  return reservation;
+}
+
 function normalizeReservationConcepts(concepts = []) {
   if (!Array.isArray(concepts) || concepts.length > 100) throw new Error("RESERVATION_INVALID");
   const ids = new Set();

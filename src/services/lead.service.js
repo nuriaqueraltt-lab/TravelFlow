@@ -27,6 +27,7 @@ function setLeadsCache(items) { leadsCache = sortLeads(items.filter((lead) => le
 function upsertLeadCache(lead) { if (!leadsCache) return; const index = leadsCache.findIndex((item) => item.id === lead.id); if (index >= 0) leadsCache[index] = { ...leadsCache[index], ...lead }; else leadsCache.unshift(lead); leadsCache = sortLeads(leadsCache.filter((item) => item.active !== false)); leadsCacheAt = Date.now(); }
 export function patchLeadCache(leadId, update) { if (!leadId || !update) return; upsertLeadCache({ id: leadId, ...update }); }
 export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null; }
+window.addEventListener("travelflow:leads-updated", invalidateLeadsCache);
 
 export async function getConfirmedBookings({ force = false } = {}) {
   if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache.filter((lead) => lead.status === "BOOKING_CONFIRMED");

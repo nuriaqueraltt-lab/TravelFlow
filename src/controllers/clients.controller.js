@@ -1,5 +1,5 @@
-import { getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
-import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById } from "../services/trip.service.js";
+import { createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
+import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 
 const appContent = () => document.querySelector(".app-content");
@@ -73,9 +73,11 @@ function discoveryChannelOptions(selected = "") {
   return `<option value="">Selecciona un canal</option>${Object.entries(CLIENT_DISCOVERY_CHANNELS).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}`;
 }
 
-function renderDetail(client) {
+function renderDetail(client, trips = []) {
   const whatsapp = whatsappUrl(client.phone);
   const email = String(client.email || "").trim();
+  const reservedTripIds = new Set(Object.keys(client.reservations || {}));
+  const availableTrips = trips.filter((trip) => !reservedTripIds.has(trip.id));
   return `<section class="client-detail-page"><button class="lead-detail-back" type="button" data-back-clients>← Tornar a clientes</button>
     <header class="client-detail-hero"><span class="client-detail-hero__avatar">${initials(client.fullName)}</span><div><span class="section-kicker">Fitxa de clienta</span><h1>${esc(client.fullName)}</h1><p>${esc(client.email || client.phone || "Completa les seves dades personals")}</p></div><div class="client-detail-hero__actions">${client.superTraveler ? '<span class="super-traveler-badge">★ Superviatgera</span>' : ""}<div class="client-contact-actions">${contactAction({ href: whatsapp, label: "WhatsApp", className: "is-whatsapp" })}${contactAction({ href: email ? `mailto:${email}` : "", label: "Correu", className: "is-email" })}</div></div></header>
     <div class="client-detail-grid"><form class="content-card client-form" id="clientForm" data-client-id="${client.id}"><header><div><span class="section-kicker">Informació personal</span><h2>Dades de la clienta</h2></div><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></header><div class="client-form-grid">
@@ -86,14 +88,16 @@ function renderDetail(client) {
       <label data-discovery-other ${client.discoveryChannel === "OTHER" ? "" : "hidden"}><span>Especifica el canal</span><input name="discoveryChannelOther" value="${esc(client.discoveryChannelOther)}" maxlength="120" placeholder="Escriu com ens ha conegut"></label>
       <label class="client-super-toggle"><input name="superTraveler" type="checkbox" ${client.superTraveler ? "checked" : ""}><span><strong>Superviatgera</strong><small>Clienta fidel o amb tracte especial</small></span></label>
     </div><p class="client-form-message" role="status"></p></form>
-    <section class="content-card client-trips"><header><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></header>${reservationRows(client)}</section></div></section>`;
+    <section class="content-card client-trips"><header><div><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></div><button class="primary-button primary-button--compact" type="button" data-show-client-booking ${availableTrips.length ? "" : "disabled"}>+ Crear reserva</button></header>
+      <form class="client-new-booking" data-client-booking-form data-client-id="${client.id}" hidden><label><span>Viatge</span><select name="tripId" required><option value="">Selecciona un viatge...</option>${availableTrips.map((trip) => `<option value="${esc(trip.id)}">${esc(trip.name)}</option>`).join("")}</select></label><p role="status" data-client-booking-message></p><div><button class="secondary-button" type="button" data-cancel-client-booking>Cancel·lar</button><button class="primary-button primary-button--compact" type="submit">Crear reserva</button></div></form>
+      ${availableTrips.length ? "" : '<p class="client-booking-hint">Aquesta clienta ja té reserva a tots els viatges disponibles.</p>'}${reservationRows(client)}</section></div></section>`;
 }
 
 async function showDetail(clientId) {
   activate();
-  const client = await getClient(clientId);
+  const [client, trips] = await Promise.all([getClient(clientId), getTrips()]);
   if (!client) return showClientsView();
-  appContent().innerHTML = renderDetail(client);
+  appContent().innerHTML = renderDetail(client, trips);
 }
 
 function reservationConcepts(reservation, trip) {
@@ -150,6 +154,8 @@ document.addEventListener("click", (event) => {
   if (reservation) { const form = reservation.closest(".client-detail-page")?.querySelector("#clientForm"); showReservation(form?.dataset.clientId, reservation.dataset.clientReservation); return; }
   if (event.target.closest("[data-back-clients]")) showClientsView();
   if (event.target.closest("[data-back-client-detail]")) { showDetail(event.target.closest(".client-reservation-page")?.querySelector("#clientReservationForm")?.dataset.clientId); return; }
+  if (event.target.closest("[data-show-client-booking]")) { document.querySelector("[data-client-booking-form]")?.removeAttribute("hidden"); return; }
+  if (event.target.closest("[data-cancel-client-booking]")) { document.querySelector("[data-client-booking-form]")?.setAttribute("hidden", ""); return; }
   if (event.target.closest("[data-add-payment]")) { const list = document.querySelector("[data-payments-list]"); list?.querySelector("[data-no-payments]")?.remove(); list?.insertAdjacentHTML("beforeend", paymentRow({ paidAt: new Date().toISOString().slice(0, 10), method: "TRANSFER_DEPOSIT" })); return; }
   const removePayment = event.target.closest("[data-remove-payment]");
   if (removePayment) { removePayment.closest("[data-payment-row]")?.remove(); refreshReservationTotals(); }
@@ -158,6 +164,20 @@ document.addEventListener("click", (event) => {
 window.addEventListener("travelflow:open-clients", () => showClientsView());
 
 document.addEventListener("submit", async (event) => {
+  if (event.target.matches("[data-client-booking-form]")) {
+    event.preventDefault();
+    const form = event.target; const message = form.querySelector("[data-client-booking-message]"); const button = form.querySelector('button[type="submit"]');
+    try {
+      button.disabled = true; message.textContent = "Creant reserva...";
+      const trip = await getTripById(form.elements.tripId.value);
+      await createClientReservation(form.dataset.clientId, { ...trip, priceConcepts: Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS });
+      await showReservation(form.dataset.clientId, trip.id);
+    } catch (error) {
+      button.disabled = false;
+      message.textContent = error.message === "RESERVATION_ALREADY_EXISTS" ? "Aquesta clienta ja té una reserva en aquest viatge." : "No s’ha pogut crear la reserva. Torna-ho a provar.";
+    }
+    return;
+  }
   if (event.target.matches("#clientReservationForm")) {
     event.preventDefault(); const form = event.target; const message = form.querySelector("[data-reservation-message]");
     const priceConcepts = [...form.querySelectorAll('input[name="reservationConcept"]')].filter((input) => input.checked || input.disabled).map((input) => ({ id: input.value, name: input.dataset.name, amount: input.closest(".client-reservation-concept").querySelector('[name="reservationConceptAmount"]').value, application: input.dataset.application, priceStatus: input.dataset.priceStatus }));
@@ -175,7 +195,7 @@ document.addEventListener("submit", async (event) => {
   try {
     submitButton.disabled = true; submitButton.textContent = "Guardant..."; message.textContent = "Guardant...";
     const saved = await updateClient(id, values);
-    appContent().innerHTML = renderDetail(saved);
+    await showDetail(saved.id);
     const savedMessage = document.querySelector(".client-form-message");
     if (savedMessage) savedMessage.textContent = "Dades guardades correctament.";
   }
