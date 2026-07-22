@@ -13,6 +13,7 @@
 .client-reservation-hero > div:last-child strong { margin-top: 5px; color: #2f463b; font-size: 1.75rem; }
 .client-reservation-page form { display: grid; grid-template-columns: minmax(0,1fr) minmax(360px,.72fr); gap: 20px; }
 .client-reservation-settings, .client-reservation-concepts, .client-reservation-payments { padding: 24px; }
+.client-cancellation-form[hidden] { display: none; }
 .client-reservation-settings > header, .client-reservation-concepts > header, .client-reservation-payments > header { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
 .client-reservation-settings h2, .client-reservation-concepts h2, .client-reservation-payments h2 { margin: 4px 0 0; }
 .client-reservation-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
@@ -25,12 +26,20 @@
 .client-dui-toggle span, .client-dui-toggle strong, .client-dui-toggle small { display: block; }
 .client-dui-toggle small { margin-top: 2px; color: #718078; font-weight: 500; }
 .client-reservation-wide { grid-column: 1/-1; }
-.client-reservation-concepts > header > strong { padding: 10px 14px; border-radius: 12px; background: #edf4ef; color: #2f463b; font-size: 1.15rem; }
+.client-reservation-concepts details > summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; cursor: pointer; list-style: none; }
+.client-reservation-concepts details > summary::-webkit-details-marker { display: none; }
+.client-reservation-concepts details > summary > div { display: grid; gap: 3px; }
+.client-reservation-concepts details > summary h2 { margin: 0; }
+.client-reservation-concepts details > summary small { color: #68756e; }
+.client-reservation-concepts details > summary > strong { padding: 10px 38px 10px 14px; border-radius: 12px; background: #edf4ef; color: #2f463b; font-size: 1.15rem; position: relative; }
+.client-reservation-concepts details > summary > strong::after { content: "⌄"; position: absolute; right: 13px; top: 50%; transform: translateY(-55%); font-size: 1.15rem; transition: transform .2s ease; }
+.client-reservation-concepts details[open] > summary > strong::after { transform: translateY(-45%) rotate(180deg); }
+.client-reservation-concepts__body { display: grid; gap: 16px; margin-top: 20px; }
 .client-pricing-mode { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; padding: 15px; border: 1px solid #cdded3; border-radius: 15px; background: #f2f7f3; cursor: pointer; }
 .client-pricing-mode input { width: 20px; height: 20px; margin-top: 2px; accent-color: #526d5e; }
 .client-pricing-mode span, .client-pricing-mode strong, .client-pricing-mode small { display: block; }
 .client-pricing-mode small { margin-top: 4px; color: #68766e; line-height: 1.4; }
-.client-reservation-concepts > div { display: grid; gap: 9px; }
+.client-reservation-concepts__body > div { display: grid; gap: 9px; }
 .client-reservation-concept { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 13px; padding: 14px; border: 1px solid #e1e7e3; border-radius: 14px; background: #fff; cursor: pointer; transition: .16s ease; }
 .client-reservation-concept:hover { border-color: #b9c9bf; }
 .client-reservation-concept.is-selected { border-color: #8da897; background: #f3f8f4; box-shadow: inset 3px 0 #526d5e; }
@@ -58,4 +67,4 @@
 .client-reservation-actions p { margin: 0; color: #2f6c4c; font-weight: 700; }
 .client-reservation-actions button { min-width: 190px; }
 @media (max-width: 980px) { .client-reservation-page form { grid-template-columns: 1fr; } .client-reservation-payments { grid-column: auto; } .client-payment-row { grid-template-columns: repeat(2,minmax(0,1fr)); } .client-payment-row > button { grid-column: 1/-1; } .client-reservation-actions { grid-column: auto; } }
-@media (max-width: 620px) { .lead-detail-actions { align-items: stretch; flex-direction: column; } .lead-detail-actions .secondary-button { width: 100%; } .client-reservation-hero { align-items: stretch; flex-direction: column; padding: 22px; } .client-reservation-hero > div:last-child { min-width: 0; } .client-reservation-settings, .client-reservation-concepts, .client-reservation-payments { padding: 18px; } .client-reservation-fields, .client-payment-row { grid-template-columns: 1fr; } .client-dui-toggle, .client-reservation-wide { grid-column: auto; } .client-reservation-concepts > header, .client-reservation-payments > header { align-items: stretch; flex-direction: column; } .client-reservation-concept { grid-template-columns: auto 1fr; } .client-concept-amount { grid-column: 2; width: 100%; } .client-reservation-payments > footer { align-items: flex-end; flex-direction: column; gap: 8px; } .client-reservation-actions { align-items: stretch; flex-direction: column; } .client-reservation-actions button { width: 100%; } }
+@media (max-width: 620px) { .lead-detail-actions { align-items: stretch; flex-direction: column; } .lead-detail-actions .secondary-button { width: 100%; } .client-reservation-hero { align-items: stretch; flex-direction: column; padding: 22px; } .client-reservation-hero > div:last-child { min-width: 0; } .client-reservation-settings, .client-reservation-concepts, .client-reservation-payments { padding: 18px; } .client-reservation-fields, .client-payment-row { grid-template-columns: 1fr; } .client-dui-toggle, .client-reservation-wide { grid-column: auto; } .client-reservation-concepts details > summary, .client-reservation-payments > header { align-items: stretch; flex-direction: column; } .client-reservation-concepts details > summary > strong { align-self: flex-start; } .client-reservation-concept { grid-template-columns: auto 1fr; } .client-concept-amount { grid-column: 2; width: 100%; } .client-reservation-payments > footer { align-items: flex-end; flex-direction: column; gap: 8px; } .client-reservation-actions { align-items: stretch; flex-direction: column; } .client-reservation-actions button { width: 100%; } }
