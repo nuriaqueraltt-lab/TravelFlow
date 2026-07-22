@@ -4,6 +4,7 @@ const SECTION_KEYS = Object.freeze({
   Clientes: "clients",
   Viatges: "trips",
   Analítica: "analytics",
+  Tresoreria: "treasury",
   Configuració: "settings"
 });
 
@@ -59,6 +60,7 @@ document.addEventListener("click", (event) => {
   if (section) {
     setActiveNavigation(section);
     if (section === "Clientes") window.dispatchEvent(new CustomEvent("travelflow:open-clients"));
+    if (section === "Tresoreria") window.dispatchEvent(new CustomEvent("travelflow:open-treasury"));
   }
 }, true);
 

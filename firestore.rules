@@ -133,6 +133,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /treasuryMovements/{movementId} {
+      allow read: if isStaff();
+      allow create, update, delete: if false;
+    }
+
     match /notifications/{notificationId} {
       allow read: if isStaff();
       allow create: if isStaff() && createdByCurrentUser();

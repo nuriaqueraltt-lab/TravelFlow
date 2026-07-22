@@ -8,7 +8,8 @@
 body[data-active-nav="dashboard"] .sidebar-nav__item[data-nav-key="dashboard"],
 body[data-active-nav="leads"] .sidebar-nav__item[data-nav-key="leads"],
 body[data-active-nav="trips"] .sidebar-nav__item[data-nav-key="trips"],
-body[data-active-nav="analytics"] .sidebar-nav__item[data-nav-key="analytics"] {
+body[data-active-nav="analytics"] .sidebar-nav__item[data-nav-key="analytics"],
+body[data-active-nav="treasury"] .sidebar-nav__item[data-nav-key="treasury"] {
   background: rgba(255, 255, 255, 0.1);
   box-shadow: inset 3px 0 0 #dec9a7;
   color: var(--color-white);
