@@ -1,13 +1,6 @@
-import { createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
-import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
+import { getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
+import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
-import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
-import { importApprovedClients } from "../services/client-import.service.js";
-import { getLeads, linkLeadToClient, rejectLeadClientMatch } from "../services/lead.service.js";
-import { findUnlinkedLeadClientMatches } from "../services/client-lead-match.service.js";
-import { showLeadDetail } from "./leads.controller.js";
-
-let pendingClientImportText = "";
 
 const appContent = () => document.querySelector(".app-content");
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -20,7 +13,7 @@ const CLIENT_DISCOVERY_CHANNELS = {
 };
 
 function whatsappUrl(phone = "") {
-  let digits = String(phone).split(/\s*(?:·|\/|\||;)\s*/, 1)[0].replace(/\D/g, "");
+  let digits = String(phone).replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.length === 9) digits = `34${digits}`;
   return digits ? `https://wa.me/${digits}` : "";
@@ -36,66 +29,12 @@ function activate() {
   window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } }));
 }
 
-function renderLinkNotice(matches) {
-  if (!matches.length) return "";
-  const safeCount = matches.filter((match) => match.confidence === "HIGH").length;
-  return `<section class="client-link-notice"><div><span class="client-link-notice__icon">↔</span><span><strong>${matches.length} possibles coincidències entre leads i clientes</strong><small>${safeCount} coincideixen per telèfon o correu. Encara no s’ha vinculat ni modificat cap registre.</small></span></div><button class="secondary-button" type="button" data-open-client-matches>Revisar coincidències</button></section>`;
-}
-
-function renderMatchesModal(matches) {
-  const rows = matches.map((match) => `<article class="client-match-row"><div><span class="client-match-confidence is-${match.confidence.toLowerCase()}">${match.confidence === "HIGH" ? "Coincidència alta" : "Cal revisar"}</span><strong>${esc(match.lead.fullName || "Lead sense nom")}</strong><small>Lead · ${esc(match.lead.email || match.lead.phone || "Sense contacte")}</small><button type="button" data-open-matched-lead="${esc(match.lead.id)}">Obrir lead →</button></div><span class="client-match-arrow">↔</span><div><span class="client-match-reasons">Mateix ${esc(match.reasons.join(" i "))}${match.ambiguous ? " · diverses candidates" : ""}</span><strong>${esc(match.client.fullName || "Clienta sense nom")}</strong><small>Clienta · ${esc(match.client.email || match.client.phone || "Sense contacte")}</small><button type="button" data-open-matched-client="${esc(match.client.id)}">Obrir clienta →</button><div class="client-match-actions"><button class="primary-button primary-button--compact" type="button" data-link-match data-lead-id="${esc(match.lead.id)}" data-client-id="${esc(match.client.id)}" data-client-name="${esc(match.client.fullName || "")}">Vincular</button><button class="secondary-button" type="button" data-reject-match data-lead-id="${esc(match.lead.id)}" data-client-id="${esc(match.client.id)}">No hi ha vincle</button></div></div></article>`).join("");
-  return `<div class="client-matches-modal" data-client-matches-modal><button class="client-matches-modal__backdrop" type="button" data-close-client-matches aria-label="Tancar"></button><section class="client-matches-panel" role="dialog" aria-modal="true" aria-labelledby="clientMatchesTitle"><header><div><span class="section-kicker">Revisió manual</span><h2 id="clientMatchesTitle">Possibles leads i clientes iguals</h2><p>Només es mostren leads actius que encara no tenen cap clienta vinculada.</p></div><button type="button" data-close-client-matches aria-label="Tancar">×</button></header><div class="client-match-list">${rows}</div><footer><p>No s’ha fet cap vinculació automàtica.</p><button class="secondary-button" type="button" data-close-client-matches>Tancar</button></footer></section></div>`;
-}
-
-function renderList(clients, matches = []) {
+function renderList(clients) {
   return `<section class="clients-page">
-    <header class="page-heading clients-heading"><div><span class="section-kicker">Viatgeres confirmades</span><h1>Clientes</h1><p>Dades personals i viatges reservats en un únic lloc.</p></div><div class="clients-heading__actions"><button class="secondary-button" type="button" data-open-client-import>Importar clientes</button><div class="clients-count"><strong>${clients.length}</strong><span>clientes</span></div></div></header>
-    ${renderLinkNotice(matches)}
+    <header class="page-heading clients-heading"><div><span class="section-kicker">Viatgeres confirmades</span><h1>Clientes</h1><p>Dades personals i viatges reservats en un únic lloc.</p></div><div class="clients-count"><strong>${clients.length}</strong><span>clientes</span></div></header>
     <section class="clients-toolbar"><label><span>Buscar clienta</span><input id="clientsSearch" type="search" placeholder="Nom, telèfon, correu o DNI..." autocomplete="off"></label><label class="clients-check"><input id="superTravelerFilter" type="checkbox"><span>Només superviatgeres</span></label></section>
     <section class="clients-table-card"><div class="clients-table-head"><span>Clienta</span><span>Contacte</span><span>Viatges</span><span>Pagaments</span><span></span></div><div id="clientsRows">${clients.map(renderRow).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div></section>
   </section>`;
-}
-
-function renderImportModal() {
-  return `<div class="client-import-modal" data-client-import-modal>
-    <button class="client-import-modal__backdrop" type="button" data-close-client-import aria-label="Tancar"></button>
-    <section class="client-import-panel" role="dialog" aria-modal="true" aria-labelledby="clientImportTitle">
-      <header><div><span class="section-kicker">Importació segura</span><h2 id="clientImportTitle">Revisar base de clientes</h2><p>Carrega un CSV exportat des d’Excel, revisa les dades i importa només les clientes que encara no existeixen.</p></div><button type="button" data-close-client-import aria-label="Tancar">×</button></header>
-      <label class="client-import-file"><span>Fitxer CSV</span><input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" data-client-import-file><small>S’admeten fitxers separats per comes, punt i coma o tabulacions.</small></label>
-      <p class="client-import-message" data-client-import-message role="status">Selecciona el fitxer per generar la vista prèvia.</p>
-      <div data-client-import-results></div>
-      <footer><button class="secondary-button" type="button" data-close-client-import>Tancar</button></footer>
-    </section>
-  </div>`;
-}
-
-function importStatus(status) {
-  return { NEW: "Nova", EXISTING: "Ja existeix", REVIEW: "Revisar", INVALID: "No vàlida" }[status] || status;
-}
-
-function renderImportPreview(preview) {
-  const { totals, items } = preview;
-  const importableCount = items.filter((item) => item.status === "NEW" || item.reviewType === "DUPLICATE_IN_FILE").length;
-  const value = (text) => esc(text || "—");
-  const rows = items.map((item) => `<tr data-import-row data-status="${item.status}" data-search="${esc([item.fullName, item.dni, item.passport, item.phone, item.email, item.address, item.postalCode, item.city, item.province, item.country, item.reason].join(" ").toLowerCase())}"><td>${item.line}</td><td><strong>${value(item.fullName || "Sense nom")}</strong></td><td>${value(item.dni)}</td><td>${value(item.passport)}</td><td>${value(item.phone)}</td><td>${value(item.email)}</td><td>${value(item.address)}</td><td>${value(item.postalCode)}</td><td>${value(item.city)}</td><td>${value(item.province)}</td><td>${value(item.country)}</td><td>${item.superTraveler ? "Sí" : "No"}</td><td><span class="client-import-status is-${item.status.toLowerCase()}">${importStatus(item.status)}</span></td><td class="client-import-reason">${esc(item.reason)}</td></tr>`).join("");
-  return `<div class="client-import-summary"><article><strong>${items.length}</strong><span>registres</span></article><article class="is-new"><strong>${totals.NEW}</strong><span>noves</span></article><article><strong>${totals.EXISTING}</strong><span>ja existents</span></article><article class="is-review"><strong>${totals.REVIEW + totals.INVALID}</strong><span>per revisar</span></article></div>
-    <div class="client-import-tools"><label><span>Buscar</span><input type="search" placeholder="Nom, document, telèfon, població..." data-client-import-search></label><label><span>Mostrar</span><select data-client-import-filter><option value="ALL">Tots els registres</option><option value="REVIEW">Només per revisar</option><option value="NEW">Només noves</option><option value="EXISTING">Només existents</option></select></label><strong data-client-import-visible>${items.length} visibles</strong></div>
-    <div class="client-import-table"><table><thead><tr><th>Línia</th><th>Nom i cognoms</th><th>DNI</th><th>Passaport</th><th>Telèfon</th><th>Correu</th><th>Adreça</th><th>CP</th><th>Població</th><th>Província</th><th>País</th><th>Superviatgera</th><th>Resultat</th><th>Motiu</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="client-import-limit">Es mostren els ${items.length} registres. Desplaça la taula horitzontalment per veure tots els camps.</p>
-    <div class="client-import-confirm"><p><strong>${importableCount} clientes preparades per importar.</strong><span>Les ${totals.EXISTING} que ja existeixen no s’importaran. Els possibles duplicats interns que has revisat sí que s’inclouran.</span></p><button class="primary-button" type="button" data-confirm-client-import>Importar ${importableCount} clientes</button></div>`;
-}
-
-function filterImportRows(modal) {
-  const query = modal.querySelector("[data-client-import-search]")?.value.trim().toLowerCase() || "";
-  const status = modal.querySelector("[data-client-import-filter]")?.value || "ALL";
-  let visible = 0;
-  modal.querySelectorAll("[data-import-row]").forEach((row) => {
-    const statusMatches = status === "ALL" || (status === "REVIEW" ? ["REVIEW", "INVALID"].includes(row.dataset.status) : row.dataset.status === status);
-    row.hidden = !statusMatches || !row.dataset.search.includes(query);
-    if (!row.hidden) visible += 1;
-  });
-  const counter = modal.querySelector("[data-client-import-visible]");
-  if (counter) counter.textContent = `${visible} visibles`;
 }
 
 function renderRow(client) {
@@ -115,10 +54,7 @@ export async function showClientsView() {
   const root = appContent();
   if (!root) return;
   root.innerHTML = '<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant clientes...</p></div>';
-  try {
-    const [clients, leads] = await Promise.all([getClients(), getLeads()]);
-    root.innerHTML = renderList(clients, findUnlinkedLeadClientMatches(leads, clients));
-  }
+  try { root.innerHTML = renderList(await getClients()); }
   catch (error) {
     console.error("No s’han pogut carregar les clientes", error);
     const permissionDenied = error?.code === "permission-denied";
@@ -137,11 +73,9 @@ function discoveryChannelOptions(selected = "") {
   return `<option value="">Selecciona un canal</option>${Object.entries(CLIENT_DISCOVERY_CHANNELS).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}`;
 }
 
-function renderDetail(client, trips = []) {
+function renderDetail(client) {
   const whatsapp = whatsappUrl(client.phone);
   const email = String(client.email || "").trim();
-  const reservedTripIds = new Set(Object.keys(client.reservations || {}));
-  const availableTrips = trips.filter((trip) => !reservedTripIds.has(trip.id));
   return `<section class="client-detail-page"><button class="lead-detail-back" type="button" data-back-clients>← Tornar a clientes</button>
     <header class="client-detail-hero"><span class="client-detail-hero__avatar">${initials(client.fullName)}</span><div><span class="section-kicker">Fitxa de clienta</span><h1>${esc(client.fullName)}</h1><p>${esc(client.email || client.phone || "Completa les seves dades personals")}</p></div><div class="client-detail-hero__actions">${client.superTraveler ? '<span class="super-traveler-badge">★ Superviatgera</span>' : ""}<div class="client-contact-actions">${contactAction({ href: whatsapp, label: "WhatsApp", className: "is-whatsapp" })}${contactAction({ href: email ? `mailto:${email}` : "", label: "Correu", className: "is-email" })}</div></div></header>
     <div class="client-detail-grid"><form class="content-card client-form" id="clientForm" data-client-id="${client.id}"><header><div><span class="section-kicker">Informació personal</span><h2>Dades de la clienta</h2></div><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></header><div class="client-form-grid">
@@ -152,16 +86,14 @@ function renderDetail(client, trips = []) {
       <label data-discovery-other ${client.discoveryChannel === "OTHER" ? "" : "hidden"}><span>Especifica el canal</span><input name="discoveryChannelOther" value="${esc(client.discoveryChannelOther)}" maxlength="120" placeholder="Escriu com ens ha conegut"></label>
       <label class="client-super-toggle"><input name="superTraveler" type="checkbox" ${client.superTraveler ? "checked" : ""}><span><strong>Superviatgera</strong><small>Clienta fidel o amb tracte especial</small></span></label>
     </div><p class="client-form-message" role="status"></p></form>
-    <section class="content-card client-trips"><header><div><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></div><button class="primary-button primary-button--compact" type="button" data-show-client-booking ${availableTrips.length ? "" : "disabled"}>+ Crear reserva</button></header>
-      <form class="client-new-booking" data-client-booking-form data-client-id="${client.id}" hidden><label><span>Viatge</span><select name="tripId" required><option value="">Selecciona un viatge...</option>${availableTrips.map((trip) => `<option value="${esc(trip.id)}">${esc(trip.name)}</option>`).join("")}</select></label><label><span>Tipus de reserva</span><select name="bookingOrigin"><option value="HISTORICAL">Reserva anterior (no compta a Analítica)</option><option value="NEW">Reserva nova d'avui</option></select></label><label data-historical-booking-date><span>Data real de la reserva</span><input type="date" name="bookedOn" required></label><p role="status" data-client-booking-message></p><div><button class="secondary-button" type="button" data-cancel-client-booking>Cancel·lar</button><button class="primary-button primary-button--compact" type="submit">Crear reserva</button></div></form>
-      ${availableTrips.length ? "" : '<p class="client-booking-hint">Aquesta clienta ja té reserva a tots els viatges disponibles.</p>'}${reservationRows(client)}</section></div></section>`;
+    <section class="content-card client-trips"><header><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></header>${reservationRows(client)}</section></div></section>`;
 }
 
 async function showDetail(clientId) {
   activate();
-  const [client, trips] = await Promise.all([getClient(clientId), getTrips()]);
+  const client = await getClient(clientId);
   if (!client) return showClientsView();
-  appContent().innerHTML = renderDetail(client, trips);
+  appContent().innerHTML = renderDetail(client);
 }
 
 function reservationConcepts(reservation, trip) {
@@ -202,7 +134,6 @@ async function showReservation(clientId, tripId) {
 }
 
 document.addEventListener("input", (event) => {
-  if (event.target.matches("[data-client-import-search]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
   if (!event.target.matches("#clientsSearch, #superTravelerFilter")) return;
   const query = document.querySelector("#clientsSearch")?.value.trim().toLowerCase() || "";
   const superOnly = document.querySelector("#superTravelerFilter")?.checked;
@@ -210,57 +141,6 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-open-client-matches]")) {
-    Promise.all([getClients(), getLeads()]).then(([clients, leads]) => document.body.insertAdjacentHTML("beforeend", renderMatchesModal(findUnlinkedLeadClientMatches(leads, clients))));
-    return;
-  }
-  if (event.target.closest("[data-close-client-matches]")) { document.querySelector("[data-client-matches-modal]")?.remove(); return; }
-  const linkMatch = event.target.closest("[data-link-match]");
-  if (linkMatch) {
-    if (!window.confirm(`Vols vincular aquest lead amb ${linkMatch.dataset.clientName || "aquesta clienta"}? No s'eliminarà ni es copiarà cap dada.`)) return;
-    linkMatch.disabled = true;
-    linkLeadToClient(linkMatch.dataset.leadId, { id: linkMatch.dataset.clientId, fullName: linkMatch.dataset.clientName }).then(() => {
-      document.querySelector("[data-client-matches-modal]")?.remove();
-      showClientsView();
-    }).catch((error) => { console.error("No s'ha pogut vincular el lead", error); linkMatch.disabled = false; window.alert("No s'ha pogut fer la vinculació. Torna-ho a provar."); });
-    return;
-  }
-  const rejectMatch = event.target.closest("[data-reject-match]");
-  if (rejectMatch) {
-    if (!window.confirm("Confirmes que aquestes dues persones no són la mateixa? Aquesta coincidència no tornarà a aparèixer.")) return;
-    rejectMatch.disabled = true;
-    rejectLeadClientMatch(rejectMatch.dataset.leadId, rejectMatch.dataset.clientId).then(() => {
-      document.querySelector("[data-client-matches-modal]")?.remove();
-      showClientsView();
-    }).catch((error) => { console.error("No s'ha pogut descartar la coincidència", error); rejectMatch.disabled = false; window.alert("No s'ha pogut guardar la decisió. Torna-ho a provar."); });
-    return;
-  }
-  const matchedLead = event.target.closest("[data-open-matched-lead]");
-  if (matchedLead) { document.querySelector("[data-client-matches-modal]")?.remove(); showLeadDetail(matchedLead.dataset.openMatchedLead); return; }
-  const matchedClient = event.target.closest("[data-open-matched-client]");
-  if (matchedClient) { document.querySelector("[data-client-matches-modal]")?.remove(); showDetail(matchedClient.dataset.openMatchedClient); return; }
-  if (event.target.closest("[data-open-client-import]")) { pendingClientImportText = ""; document.body.insertAdjacentHTML("beforeend", renderImportModal()); return; }
-  if (event.target.closest("[data-close-client-import]")) { pendingClientImportText = ""; document.querySelector("[data-client-import-modal]")?.remove(); return; }
-  const confirmImport = event.target.closest("[data-confirm-client-import]");
-  if (confirmImport) {
-    const modal = confirmImport.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]");
-    if (!pendingClientImportText || !message) return;
-    if (!window.confirm("Vols importar ara les clientes preparades? Les que ja existeixen no es modificaran.")) return;
-    confirmImport.disabled = true; confirmImport.textContent = "Important clientes..."; message.textContent = "Guardant les clientes a TravelFlow. No tanquis aquesta finestra...";
-    importApprovedClients(pendingClientImportText).then(async (result) => {
-      pendingClientImportText = "";
-      message.textContent = `Importació completada: ${result.imported} clientes afegides i ${result.skippedExisting} existents omeses.`;
-      const results = modal.querySelector("[data-client-import-results]");
-      if (results) results.innerHTML = `<div class="client-import-success"><strong>${result.imported} clientes importades correctament</strong><span>Les clientes que ja existien s’han conservat sense canvis.</span></div>`;
-      confirmImport.remove();
-      await showClientsView();
-    }).catch((error) => {
-      console.error("No s’ha pogut completar la importació de clientes", error);
-      confirmImport.disabled = false; confirmImport.textContent = "Tornar a intentar la importació";
-      message.textContent = "La importació no s’ha pogut completar. Torna-ho a provar; les clientes ja guardades no es duplicaran.";
-    });
-    return;
-  }
   if (event.target.closest("[data-retry-clients]")) { showClientsView(); return; }
   const directClient = event.target.closest("[data-open-client-id]");
   if (directClient) { window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } })); showDetail(directClient.dataset.openClientId); return; }
@@ -270,59 +150,14 @@ document.addEventListener("click", (event) => {
   if (reservation) { const form = reservation.closest(".client-detail-page")?.querySelector("#clientForm"); showReservation(form?.dataset.clientId, reservation.dataset.clientReservation); return; }
   if (event.target.closest("[data-back-clients]")) showClientsView();
   if (event.target.closest("[data-back-client-detail]")) { showDetail(event.target.closest(".client-reservation-page")?.querySelector("#clientReservationForm")?.dataset.clientId); return; }
-  if (event.target.closest("[data-show-client-booking]")) { document.querySelector("[data-client-booking-form]")?.removeAttribute("hidden"); return; }
-  if (event.target.closest("[data-cancel-client-booking]")) { document.querySelector("[data-client-booking-form]")?.setAttribute("hidden", ""); return; }
   if (event.target.closest("[data-add-payment]")) { const list = document.querySelector("[data-payments-list]"); list?.querySelector("[data-no-payments]")?.remove(); list?.insertAdjacentHTML("beforeend", paymentRow({ paidAt: new Date().toISOString().slice(0, 10), method: "TRANSFER_DEPOSIT" })); return; }
   const removePayment = event.target.closest("[data-remove-payment]");
   if (removePayment) { removePayment.closest("[data-payment-row]")?.remove(); refreshReservationTotals(); }
 });
 
-document.addEventListener("change", async (event) => {
-  if (event.target.matches('[data-client-booking-form] [name="bookingOrigin"]')) {
-    const form = event.target.form;
-    const historical = event.target.value === "HISTORICAL";
-    form.querySelector("[data-historical-booking-date]").hidden = !historical;
-    form.elements.bookedOn.required = historical;
-    if (!historical) form.elements.bookedOn.value = "";
-    return;
-  }
-  if (event.target.matches("[data-client-import-filter]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
-  if (!event.target.matches("[data-client-import-file]")) return;
-  const modal = event.target.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]"); const results = modal?.querySelector("[data-client-import-results]");
-  const file = event.target.files?.[0]; if (!file || !message || !results) return;
-  try {
-    message.textContent = "Comparant amb les clientes de TravelFlow..."; results.innerHTML = "";
-    const [text, clients] = await Promise.all([readClientImportFile(file), getClients({ force: true })]);
-    const preview = previewClientImport(text, clients);
-    pendingClientImportText = text;
-    results.innerHTML = renderImportPreview(preview); message.textContent = `Vista prèvia completada: ${preview.totals.NEW} clientes noves.`;
-  } catch (error) {
-    console.error("No s’ha pogut revisar la importació de clientes", error);
-    message.textContent = error.message === "IMPORT_NAME_COLUMN_REQUIRED" ? "No he trobat la columna del nom de la clienta. Revisa les capçaleres del CSV." : "No s’ha pogut llegir el fitxer. Comprova que sigui un CSV vàlid.";
-  }
-});
-
 window.addEventListener("travelflow:open-clients", () => showClientsView());
 
 document.addEventListener("submit", async (event) => {
-  if (event.target.matches("[data-client-booking-form]")) {
-    event.preventDefault();
-    const form = event.target; const message = form.querySelector("[data-client-booking-message]"); const button = form.querySelector('button[type="submit"]');
-    try {
-      button.disabled = true; message.textContent = "Creant reserva...";
-      const trip = await getTripById(form.elements.tripId.value);
-      await createClientReservation(
-        form.dataset.clientId,
-        { ...trip, priceConcepts: Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS },
-        { historical: form.elements.bookingOrigin.value === "HISTORICAL", bookedOn: form.elements.bookedOn.value }
-      );
-      await showReservation(form.dataset.clientId, trip.id);
-    } catch (error) {
-      button.disabled = false;
-      message.textContent = error.message === "RESERVATION_ALREADY_EXISTS" ? "Aquesta clienta ja té una reserva en aquest viatge." : error.message === "RESERVATION_DATE_REQUIRED" ? "Indica la data real de la reserva anterior." : "No s’ha pogut crear la reserva. Torna-ho a provar.";
-    }
-    return;
-  }
   if (event.target.matches("#clientReservationForm")) {
     event.preventDefault(); const form = event.target; const message = form.querySelector("[data-reservation-message]");
     const priceConcepts = [...form.querySelectorAll('input[name="reservationConcept"]')].filter((input) => input.checked || input.disabled).map((input) => ({ id: input.value, name: input.dataset.name, amount: input.closest(".client-reservation-concept").querySelector('[name="reservationConceptAmount"]').value, application: input.dataset.application, priceStatus: input.dataset.priceStatus }));
@@ -340,7 +175,7 @@ document.addEventListener("submit", async (event) => {
   try {
     submitButton.disabled = true; submitButton.textContent = "Guardant..."; message.textContent = "Guardant...";
     const saved = await updateClient(id, values);
-    await showDetail(saved.id);
+    appContent().innerHTML = renderDetail(saved);
     const savedMessage = document.querySelector(".client-form-message");
     if (savedMessage) savedMessage.textContent = "Dades guardades correctament.";
   }
