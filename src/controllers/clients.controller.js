@@ -57,11 +57,26 @@ function importStatus(status) {
 
 function renderImportPreview(preview) {
   const { totals, items } = preview;
-  const rows = items.slice(0, 100).map((item) => `<tr><td>${item.line}</td><td><strong>${esc(item.fullName || "Sense nom")}</strong><small>${esc(item.email || item.phone || item.dni || item.passport || "Sense identificador")}</small></td><td><span class="client-import-status is-${item.status.toLowerCase()}">${importStatus(item.status)}</span></td><td>${esc(item.reason)}</td></tr>`).join("");
+  const value = (text) => esc(text || "—");
+  const rows = items.map((item) => `<tr data-import-row data-status="${item.status}" data-search="${esc([item.fullName, item.dni, item.passport, item.phone, item.email, item.address, item.postalCode, item.city, item.province, item.country, item.reason].join(" ").toLowerCase())}"><td>${item.line}</td><td><strong>${value(item.fullName || "Sense nom")}</strong></td><td>${value(item.dni)}</td><td>${value(item.passport)}</td><td>${value(item.phone)}</td><td>${value(item.email)}</td><td>${value(item.address)}</td><td>${value(item.postalCode)}</td><td>${value(item.city)}</td><td>${value(item.province)}</td><td>${value(item.country)}</td><td>${item.superTraveler ? "Sí" : "No"}</td><td><span class="client-import-status is-${item.status.toLowerCase()}">${importStatus(item.status)}</span></td><td class="client-import-reason">${esc(item.reason)}</td></tr>`).join("");
   return `<div class="client-import-summary"><article><strong>${items.length}</strong><span>registres</span></article><article class="is-new"><strong>${totals.NEW}</strong><span>noves</span></article><article><strong>${totals.EXISTING}</strong><span>ja existents</span></article><article class="is-review"><strong>${totals.REVIEW + totals.INVALID}</strong><span>per revisar</span></article></div>
-    <div class="client-import-table"><table><thead><tr><th>Línia</th><th>Clienta</th><th>Resultat</th><th>Motiu</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${items.length > 100 ? `<p class="client-import-limit">Es mostren els primers 100 registres de ${items.length}.</p>` : ""}
+    <div class="client-import-tools"><label><span>Buscar</span><input type="search" placeholder="Nom, document, telèfon, població..." data-client-import-search></label><label><span>Mostrar</span><select data-client-import-filter><option value="ALL">Tots els registres</option><option value="REVIEW">Només per revisar</option><option value="NEW">Només noves</option><option value="EXISTING">Només existents</option></select></label><strong data-client-import-visible>${items.length} visibles</strong></div>
+    <div class="client-import-table"><table><thead><tr><th>Línia</th><th>Nom i cognoms</th><th>DNI</th><th>Passaport</th><th>Telèfon</th><th>Correu</th><th>Adreça</th><th>CP</th><th>Població</th><th>Província</th><th>País</th><th>Superviatgera</th><th>Resultat</th><th>Motiu</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="client-import-limit">Es mostren els ${items.length} registres. Desplaça la taula horitzontalment per veure tots els camps.</p>
     <p class="client-import-safe">Encara no s’ha importat cap dada. Les clientes marcades per revisar no s’importaran automàticament en la fase següent.</p>`;
+}
+
+function filterImportRows(modal) {
+  const query = modal.querySelector("[data-client-import-search]")?.value.trim().toLowerCase() || "";
+  const status = modal.querySelector("[data-client-import-filter]")?.value || "ALL";
+  let visible = 0;
+  modal.querySelectorAll("[data-import-row]").forEach((row) => {
+    const statusMatches = status === "ALL" || (status === "REVIEW" ? ["REVIEW", "INVALID"].includes(row.dataset.status) : row.dataset.status === status);
+    row.hidden = !statusMatches || !row.dataset.search.includes(query);
+    if (!row.hidden) visible += 1;
+  });
+  const counter = modal.querySelector("[data-client-import-visible]");
+  if (counter) counter.textContent = `${visible} visibles`;
 }
 
 function renderRow(client) {
@@ -165,6 +180,7 @@ async function showReservation(clientId, tripId) {
 }
 
 document.addEventListener("input", (event) => {
+  if (event.target.matches("[data-client-import-search]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
   if (!event.target.matches("#clientsSearch, #superTravelerFilter")) return;
   const query = document.querySelector("#clientsSearch")?.value.trim().toLowerCase() || "";
   const superOnly = document.querySelector("#superTravelerFilter")?.checked;
@@ -191,6 +207,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  if (event.target.matches("[data-client-import-filter]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
   if (!event.target.matches("[data-client-import-file]")) return;
   const modal = event.target.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]"); const results = modal?.querySelector("[data-client-import-results]");
   const file = event.target.files?.[0]; if (!file || !message || !results) return;

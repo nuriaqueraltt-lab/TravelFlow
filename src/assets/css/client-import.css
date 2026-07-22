@@ -1,7 +1,7 @@
 .clients-heading__actions { display: flex; align-items: center; gap: 12px; }
 .client-import-modal { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 24px; }
 .client-import-modal__backdrop { position: absolute; inset: 0; border: 0; background: rgba(24, 35, 29, .55); }
-.client-import-panel { position: relative; display: grid; gap: 20px; width: min(980px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 26px; border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(20, 31, 25, .25); }
+.client-import-panel { position: relative; display: grid; gap: 20px; width: min(1480px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 26px; border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(20, 31, 25, .25); }
 .client-import-panel > header { display: flex; justify-content: space-between; gap: 20px; }
 .client-import-panel > header h2 { margin: 5px 0; color: #263a30; }
 .client-import-panel > header p { max-width: 720px; margin: 0; color: #69766f; }
@@ -16,10 +16,17 @@
 .client-import-summary span { color: #69766f; font-size: .78rem; font-weight: 750; text-transform: uppercase; }
 .client-import-summary .is-new { background: #eaf6ee; }
 .client-import-summary .is-review { background: #fff4df; }
+.client-import-tools { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(190px, .35fr) auto; align-items: end; gap: 12px; }
+.client-import-tools label { display: grid; gap: 6px; }
+.client-import-tools label > span { color: #516158; font-size: .75rem; font-weight: 800; }
+.client-import-tools input, .client-import-tools select { min-height: 42px; padding: 0 12px; border: 1px solid #dce4df; border-radius: 11px; background: #fff; color: #263a30; font: inherit; }
+.client-import-tools > strong { padding-bottom: 11px; color: #5f6e66; font-size: .8rem; white-space: nowrap; }
 .client-import-table { max-height: 390px; overflow: auto; border: 1px solid #e1e7e3; border-radius: 14px; }
-.client-import-table table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.client-import-table table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: .84rem; }
 .client-import-table th, .client-import-table td { padding: 11px 13px; border-bottom: 1px solid #e9eeeb; text-align: left; vertical-align: top; }
-.client-import-table th { position: sticky; top: 0; background: #f5f8f6; color: #5f6e66; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+.client-import-table th { position: sticky; top: 0; z-index: 1; background: #f5f8f6; color: #5f6e66; font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.client-import-table td { max-width: 230px; white-space: nowrap; }
+.client-import-table .client-import-reason { min-width: 250px; white-space: normal; }
 .client-import-table td small { display: block; margin-top: 3px; color: #758078; }
 .client-import-status { display: inline-block; padding: 5px 8px; border-radius: 999px; font-size: .72rem; font-weight: 850; white-space: nowrap; }
 .client-import-status.is-new { background: #e4f4e9; color: #286542; }
@@ -27,4 +34,4 @@
 .client-import-status.is-review, .client-import-status.is-invalid { background: #fff0d6; color: #8b5c13; }
 .client-import-safe { margin: 0; padding: 12px 14px; border-radius: 12px; background: #f4f7f5; }
 .client-import-panel > footer { display: flex; justify-content: flex-end; }
-@media (max-width: 680px) { .clients-heading__actions { align-items: flex-end; flex-direction: column-reverse; } .client-import-modal { padding: 10px; } .client-import-panel { max-height: calc(100vh - 20px); padding: 18px; } .client-import-summary { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 680px) { .clients-heading__actions { align-items: flex-end; flex-direction: column-reverse; } .client-import-modal { padding: 10px; } .client-import-panel { max-height: calc(100vh - 20px); padding: 18px; } .client-import-summary { grid-template-columns: repeat(2, 1fr); } .client-import-tools { grid-template-columns: 1fr; } .client-import-tools > strong { padding: 0; } }
