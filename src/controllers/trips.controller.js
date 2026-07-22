@@ -28,7 +28,7 @@ function currentTrips(trips) {
 
 function renderBookingList(bookings, tripId) {
   if (!bookings.length) return `<p class="trips-hub-card__empty">Encara no hi ha reserves confirmades.</p>`;
-  return `<ul class="trips-hub-bookings">${bookings.map((booking) => { const dui = booking.tripInterests?.[tripId]?.dui ?? (booking.bookingTripId === tripId ? booking.bookingDui : undefined); return `<li><button type="button" ${booking.clientId ? `data-open-client-id="${booking.clientId}"` : `data-lead-id="${booking.id}"`}>${escapeHtml(booking.clientNameSnapshot || booking.fullName)}</button><span class="${dui === true ? "is-dui" : ""}">${typeof dui === "boolean" ? `DUI: ${dui ? "Sí" : "No"}` : "DUI pendent"}</span></li>`; }).join("")}</ul>`;
+  return `<ul class="trips-hub-bookings">${bookings.map((booking) => { const dui = booking.tripInterests?.[tripId]?.dui ?? (booking.bookingTripId === tripId ? booking.bookingDui : undefined); return `<li><button type="button" ${booking.clientId ? `data-open-client-id="${booking.clientId}"` : `data-lead-id="${booking.id}"`}>${escapeHtml(booking.clientNameSnapshot || booking.fullName)}</button>${dui === true ? '<span class="is-dui">DUI</span>' : ""}</li>`; }).join("")}</ul>`;
 }
 
 function bookingsForTrip(bookings, tripId) {
