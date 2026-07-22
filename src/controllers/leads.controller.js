@@ -272,3 +272,4 @@ function refreshBookingTotal(form) {
   if (output) output.textContent = formatCurrency(total);
 }
 window.addEventListener("travelflow:lead-created", (event) => { if (event.detail?.id) showLeadDetail(event.detail.id); });
+window.addEventListener("travelflow:open-lead", (event) => { if (event.detail?.id) showLeadDetail(event.detail.id); });
