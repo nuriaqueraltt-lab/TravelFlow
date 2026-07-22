@@ -1,7 +1,7 @@
 import { createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
-import { previewClientImport } from "../services/client-import-preview.service.js";
+import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
 import { importApprovedClients } from "../services/client-import.service.js";
 
 let pendingClientImportText = "";
@@ -237,7 +237,7 @@ document.addEventListener("change", async (event) => {
   const file = event.target.files?.[0]; if (!file || !message || !results) return;
   try {
     message.textContent = "Comparant amb les clientes de TravelFlow..."; results.innerHTML = "";
-    const [text, clients] = await Promise.all([file.text(), getClients({ force: true })]);
+    const [text, clients] = await Promise.all([readClientImportFile(file), getClients({ force: true })]);
     const preview = previewClientImport(text, clients);
     pendingClientImportText = text;
     results.innerHTML = renderImportPreview(preview); message.textContent = `Vista prèvia completada: ${preview.totals.NEW} clientes noves.`;

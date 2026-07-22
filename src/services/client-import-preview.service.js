@@ -5,6 +5,15 @@ function emailKey(value) { return clean(value).toLowerCase(); }
 function phoneKey(value) { return clean(value).replace(/\D/g, "").replace(/^0034/, "34").replace(/^34(?=\d{9}$)/, ""); }
 function phoneKeys(value) { return clean(value).split(/\s*(?:·|\/|\||;)\s*/).map(phoneKey).filter(Boolean); }
 
+export async function readClientImportFile(file) {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 const FIELD_ALIASES = {
   firstName: ["nom", "nombre"],
   lastName: ["cognoms", "apellidos", "cognom", "apellido", "apellido1", "primercognom", "primerapellido"],
