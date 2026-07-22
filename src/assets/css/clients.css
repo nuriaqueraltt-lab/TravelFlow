@@ -19,6 +19,14 @@
 .client-detail-hero__avatar { background: #e8f0ea; color: #2f463b; }
 .client-detail-hero h1 { color: #263a30; }
 .client-detail-hero p { color: #6c7a72; }
+.client-detail-hero__actions { display: grid; justify-items: end; gap: 10px; }
+.client-contact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.client-contact-action { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 13px; border: 1px solid #d9e2dc; border-radius: 11px; background: #fff; color: #2f463b; font-size: .78rem; font-weight: 850; text-decoration: none; transition: border-color .18s ease, background .18s ease; }
+.client-contact-action:hover { border-color: #9fb2a6; background: #f8faf8; }
+.client-contact-action.is-whatsapp { border-color: #cfe8d7; color: #237a45; }
+.client-contact-action.is-disabled { opacity: .42; cursor: not-allowed; }
+.client-form select { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid #dfe5e1; border-radius: 12px; background: #fbfcfb; color: #263a30; }
+.client-form [hidden] { display: none; }
 
 /* Llistat de clientes en format taula */
 .clients-table-card {
@@ -92,4 +100,6 @@
   .client-row__trips,
   .client-payment-status { display: none; }
   .client-row__avatar { width: 43px; height: 43px; }
+  .client-detail-hero__actions { grid-column: 1 / -1; justify-items: start; }
+  .client-contact-actions { justify-content: flex-start; }
 }

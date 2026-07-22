@@ -7,6 +7,23 @@ const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&":
 const initials = (name) => String(name || "?").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 const money = (value) => Number(value || 0).toLocaleString("ca-ES", { style: "currency", currency: "EUR" });
 const date = (value) => value ? new Intl.DateTimeFormat("ca-ES").format(new Date(value)) : "—";
+const CLIENT_DISCOVERY_CHANNELS = {
+  FACEBOOK: "Facebook", INSTAGRAM: "Instagram", WEB: "Web", GOOGLE: "Google",
+  FRIENDS: "Amigues o conegudes", OTHER: "Altres"
+};
+
+function whatsappUrl(phone = "") {
+  let digits = String(phone).replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 9) digits = `34${digits}`;
+  return digits ? `https://wa.me/${digits}` : "";
+}
+
+function contactAction({ href, label, className }) {
+  return href
+    ? `<a class="client-contact-action ${className}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    : `<span class="client-contact-action ${className} is-disabled" aria-disabled="true">${label}</span>`;
+}
 
 function activate() {
   window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } }));
@@ -52,13 +69,21 @@ function reservationRows(client) {
 
 function field(label, name, value = "", type = "text", required = false) { return `<label><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${required ? "required" : ""}></label>`; }
 
+function discoveryChannelOptions(selected = "") {
+  return `<option value="">Selecciona un canal</option>${Object.entries(CLIENT_DISCOVERY_CHANNELS).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}`;
+}
+
 function renderDetail(client) {
+  const whatsapp = whatsappUrl(client.phone);
+  const email = String(client.email || "").trim();
   return `<section class="client-detail-page"><button class="lead-detail-back" type="button" data-back-clients>← Tornar a clientes</button>
-    <header class="client-detail-hero"><span class="client-detail-hero__avatar">${initials(client.fullName)}</span><div><span class="section-kicker">Fitxa de clienta</span><h1>${esc(client.fullName)}</h1><p>${esc(client.email || client.phone || "Completa les seves dades personals")}</p></div>${client.superTraveler ? '<span class="super-traveler-badge">★ Superviatgera</span>' : ""}</header>
+    <header class="client-detail-hero"><span class="client-detail-hero__avatar">${initials(client.fullName)}</span><div><span class="section-kicker">Fitxa de clienta</span><h1>${esc(client.fullName)}</h1><p>${esc(client.email || client.phone || "Completa les seves dades personals")}</p></div><div class="client-detail-hero__actions">${client.superTraveler ? '<span class="super-traveler-badge">★ Superviatgera</span>' : ""}<div class="client-contact-actions">${contactAction({ href: whatsapp, label: "WhatsApp", className: "is-whatsapp" })}${contactAction({ href: email ? `mailto:${email}` : "", label: "Correu", className: "is-email" })}</div></div></header>
     <div class="client-detail-grid"><form class="content-card client-form" id="clientForm" data-client-id="${client.id}"><header><div><span class="section-kicker">Informació personal</span><h2>Dades de la clienta</h2></div><button class="primary-button primary-button--compact" type="submit">Guardar canvis</button></header><div class="client-form-grid">
       ${field("Nom i cognoms", "fullName", client.fullName, "text", true)}${field("Telèfon", "phone", client.phone, "tel")}${field("Correu electrònic", "email", client.email, "email")}${field("Data de naixement", "birthDate", client.birthDate, "date")}
       <label class="client-form-wide"><span>Adreça</span><input name="address" value="${esc(client.address)}"></label>${field("Codi postal", "postalCode", client.postalCode)}${field("Població", "city", client.city)}${field("Província", "province", client.province)}
       ${field("DNI", "dni", client.dni)}${field("Caducitat DNI", "dniExpiry", client.dniExpiry, "date")}${field("Passaport", "passport", client.passport)}${field("Caducitat passaport", "passportExpiry", client.passportExpiry, "date")}
+      <label><span>Com ens ha conegut?</span><select name="discoveryChannel">${discoveryChannelOptions(client.discoveryChannel)}</select></label>
+      <label data-discovery-other ${client.discoveryChannel === "OTHER" ? "" : "hidden"}><span>Especifica el canal</span><input name="discoveryChannelOther" value="${esc(client.discoveryChannelOther)}" maxlength="120" placeholder="Escriu com ens ha conegut"></label>
       <label class="client-super-toggle"><input name="superTraveler" type="checkbox" ${client.superTraveler ? "checked" : ""}><span><strong>Superviatgera</strong><small>Clienta fidel o amb tracte especial</small></span></label>
     </div><p class="client-form-message" role="status"></p></form>
     <section class="content-card client-trips"><header><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></header>${reservationRows(client)}</section></div></section>`;
@@ -170,6 +195,12 @@ function refreshReservationTotals() {
 document.addEventListener("input", (event) => { if (event.target.matches('#clientReservationForm [name="paymentAmount"]')) refreshReservationTotals(); });
 document.addEventListener("input", (event) => { if (event.target.matches('#clientReservationForm [name="reservationConceptAmount"]')) refreshReservationTotals(); });
 document.addEventListener("change", (event) => {
+  if (event.target.matches('#clientForm [name="discoveryChannel"]')) {
+    const otherField = event.target.form?.querySelector("[data-discovery-other]");
+    if (!otherField) return;
+    otherField.hidden = event.target.value !== "OTHER";
+    if (otherField.hidden) otherField.querySelector("input").value = "";
+  }
   if (event.target.matches('#clientReservationForm [name="linkedPricing"]')) {
     const linked = event.target.checked;
     event.target.form.querySelectorAll('[name="reservationConceptAmount"]').forEach((input) => { input.readOnly = linked; if (linked) input.value = input.dataset.tripAmount; });

@@ -15,6 +15,7 @@ function clean(value) { return String(value || "").trim(); }
 function emailKey(value) { return clean(value).toLowerCase(); }
 function phoneKey(value) { return clean(value).replace(/\D/g, ""); }
 function dniKey(value) { return clean(value).toUpperCase().replace(/[\s.-]/g, ""); }
+const CLIENT_DISCOVERY_CHANNELS = new Set(["FACEBOOK", "INSTAGRAM", "WEB", "GOOGLE", "FRIENDS", "OTHER"]);
 
 export function invalidateClientsCache() { clientsCache = null; clientsCacheComplete = false; clientsById.clear(); }
 window.addEventListener("travelflow:clients-updated", invalidateClientsCache);
@@ -78,7 +79,7 @@ export async function ensureClientForBooking(lead, booking) {
     reservations: { ...(existing?.reservations || {}), [booking.tripId]: reservation },
     active: true, updatedBy: user.uid, updatedAt: serverTimestamp()
   };
-  if (!existing) Object.assign(base, { address: "", postalCode: "", city: "", province: "", birthDate: "", dni: "", dniNormalized: "", dniExpiry: "", passport: "", passportExpiry: "", superTraveler: false, createdBy: user.uid, createdAt: serverTimestamp() });
+  if (!existing) Object.assign(base, { address: "", postalCode: "", city: "", province: "", birthDate: "", dni: "", dniNormalized: "", dniExpiry: "", passport: "", passportExpiry: "", discoveryChannel: "", discoveryChannelOther: "", superTraveler: false, createdBy: user.uid, createdAt: serverTimestamp() });
   await setDoc(clientRef, base, { merge: true });
   invalidateClientsCache();
   return clientRef.id;
@@ -87,6 +88,7 @@ export async function ensureClientForBooking(lead, booking) {
 export async function updateClient(clientId, input) {
   const user = getCurrentUser();
   if (!user) throw new Error("AUTH_REQUIRED");
+  const discoveryChannel = CLIENT_DISCOVERY_CHANNELS.has(clean(input.discoveryChannel)) ? clean(input.discoveryChannel) : "";
   const payload = {
     fullName: clean(input.fullName), fullNameSearch: clean(input.fullName).toLowerCase(),
     address: clean(input.address), postalCode: clean(input.postalCode), city: clean(input.city), province: clean(input.province),
@@ -94,6 +96,7 @@ export async function updateClient(clientId, input) {
     email: emailKey(input.email), emailNormalized: emailKey(input.email),
     birthDate: clean(input.birthDate), dni: clean(input.dni).toUpperCase(), dniNormalized: dniKey(input.dni), dniExpiry: clean(input.dniExpiry),
     passport: clean(input.passport).toUpperCase(), passportExpiry: clean(input.passportExpiry),
+    discoveryChannel, discoveryChannelOther: discoveryChannel === "OTHER" ? clean(input.discoveryChannelOther).slice(0, 120) : "",
     superTraveler: Boolean(input.superTraveler), updatedBy: user.uid, updatedAt: serverTimestamp()
   };
   if (!payload.fullName) throw new Error("CLIENT_NAME_REQUIRED");
