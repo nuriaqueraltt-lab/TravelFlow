@@ -33,5 +33,12 @@
 .client-import-status.is-existing { background: #edf0ee; color: #57645d; }
 .client-import-status.is-review, .client-import-status.is-invalid { background: #fff0d6; color: #8b5c13; }
 .client-import-safe { margin: 0; padding: 12px 14px; border-radius: 12px; background: #f4f7f5; }
+.client-import-confirm { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px; border: 1px solid #cfe2d6; border-radius: 14px; background: #eef8f1; }
+.client-import-confirm p { display: grid; gap: 4px; margin: 0; color: #496056; }
+.client-import-confirm p strong { color: #244b37; }
+.client-import-confirm p span { font-size: .84rem; }
+.client-import-confirm button { flex: 0 0 auto; }
+.client-import-success { display: grid; gap: 6px; padding: 24px; border-radius: 16px; background: #eaf6ee; color: #315b44; text-align: center; }
+.client-import-success strong { font-size: 1.2rem; }
 .client-import-panel > footer { display: flex; justify-content: flex-end; }
-@media (max-width: 680px) { .clients-heading__actions { align-items: flex-end; flex-direction: column-reverse; } .client-import-modal { padding: 10px; } .client-import-panel { max-height: calc(100vh - 20px); padding: 18px; } .client-import-summary { grid-template-columns: repeat(2, 1fr); } .client-import-tools { grid-template-columns: 1fr; } .client-import-tools > strong { padding: 0; } }
+@media (max-width: 680px) { .clients-heading__actions { align-items: flex-end; flex-direction: column-reverse; } .client-import-modal { padding: 10px; } .client-import-panel { max-height: calc(100vh - 20px); padding: 18px; } .client-import-summary { grid-template-columns: repeat(2, 1fr); } .client-import-tools { grid-template-columns: 1fr; } .client-import-tools > strong { padding: 0; } .client-import-confirm { align-items: stretch; flex-direction: column; } }

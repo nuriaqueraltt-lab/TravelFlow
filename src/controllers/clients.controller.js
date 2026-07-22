@@ -2,6 +2,9 @@ import { createClientReservation, getClient, getClients, updateClient, updateCli
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 import { previewClientImport } from "../services/client-import-preview.service.js";
+import { importApprovedClients } from "../services/client-import.service.js";
+
+let pendingClientImportText = "";
 
 const appContent = () => document.querySelector(".app-content");
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -42,7 +45,7 @@ function renderImportModal() {
   return `<div class="client-import-modal" data-client-import-modal>
     <button class="client-import-modal__backdrop" type="button" data-close-client-import aria-label="Tancar"></button>
     <section class="client-import-panel" role="dialog" aria-modal="true" aria-labelledby="clientImportTitle">
-      <header><div><span class="section-kicker">Importació segura</span><h2 id="clientImportTitle">Revisar base de clientes</h2><p>Carrega un CSV exportat des d’Excel. Aquesta pantalla només compara les dades: no guarda res a Firestore.</p></div><button type="button" data-close-client-import aria-label="Tancar">×</button></header>
+      <header><div><span class="section-kicker">Importació segura</span><h2 id="clientImportTitle">Revisar base de clientes</h2><p>Carrega un CSV exportat des d’Excel, revisa les dades i importa només les clientes que encara no existeixen.</p></div><button type="button" data-close-client-import aria-label="Tancar">×</button></header>
       <label class="client-import-file"><span>Fitxer CSV</span><input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" data-client-import-file><small>S’admeten fitxers separats per comes, punt i coma o tabulacions.</small></label>
       <p class="client-import-message" data-client-import-message role="status">Selecciona el fitxer per generar la vista prèvia.</p>
       <div data-client-import-results></div>
@@ -63,7 +66,7 @@ function renderImportPreview(preview) {
     <div class="client-import-tools"><label><span>Buscar</span><input type="search" placeholder="Nom, document, telèfon, població..." data-client-import-search></label><label><span>Mostrar</span><select data-client-import-filter><option value="ALL">Tots els registres</option><option value="REVIEW">Només per revisar</option><option value="NEW">Només noves</option><option value="EXISTING">Només existents</option></select></label><strong data-client-import-visible>${items.length} visibles</strong></div>
     <div class="client-import-table"><table><thead><tr><th>Línia</th><th>Nom i cognoms</th><th>DNI</th><th>Passaport</th><th>Telèfon</th><th>Correu</th><th>Adreça</th><th>CP</th><th>Població</th><th>Província</th><th>País</th><th>Superviatgera</th><th>Resultat</th><th>Motiu</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="client-import-limit">Es mostren els ${items.length} registres. Desplaça la taula horitzontalment per veure tots els camps.</p>
-    <p class="client-import-safe">Encara no s’ha importat cap dada. Les clientes marcades per revisar no s’importaran automàticament en la fase següent.</p>`;
+    <div class="client-import-confirm"><p><strong>${totals.NEW + totals.REVIEW} clientes preparades per importar.</strong><span>Les ${totals.EXISTING} que ja existeixen no s’importaran. Les ${totals.REVIEW} que has revisat sí que s’inclouran.</span></p><button class="primary-button" type="button" data-confirm-client-import>Importar ${totals.NEW + totals.REVIEW} clientes</button></div>`;
 }
 
 function filterImportRows(modal) {
@@ -188,8 +191,27 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-open-client-import]")) { document.body.insertAdjacentHTML("beforeend", renderImportModal()); return; }
-  if (event.target.closest("[data-close-client-import]")) { document.querySelector("[data-client-import-modal]")?.remove(); return; }
+  if (event.target.closest("[data-open-client-import]")) { pendingClientImportText = ""; document.body.insertAdjacentHTML("beforeend", renderImportModal()); return; }
+  if (event.target.closest("[data-close-client-import]")) { pendingClientImportText = ""; document.querySelector("[data-client-import-modal]")?.remove(); return; }
+  const confirmImport = event.target.closest("[data-confirm-client-import]");
+  if (confirmImport) {
+    const modal = confirmImport.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]");
+    if (!pendingClientImportText || !message) return;
+    confirmImport.disabled = true; confirmImport.textContent = "Important clientes..."; message.textContent = "Guardant les clientes a TravelFlow. No tanquis aquesta finestra...";
+    importApprovedClients(pendingClientImportText).then(async (result) => {
+      pendingClientImportText = "";
+      message.textContent = `Importació completada: ${result.imported} clientes afegides i ${result.skippedExisting} existents omeses.`;
+      const results = modal.querySelector("[data-client-import-results]");
+      if (results) results.innerHTML = `<div class="client-import-success"><strong>${result.imported} clientes importades correctament</strong><span>Les clientes que ja existien s’han conservat sense canvis.</span></div>`;
+      confirmImport.remove();
+      await showClientsView();
+    }).catch((error) => {
+      console.error("No s’ha pogut completar la importació de clientes", error);
+      confirmImport.disabled = false; confirmImport.textContent = "Tornar a intentar la importació";
+      message.textContent = "La importació no s’ha pogut completar. Torna-ho a provar; les clientes ja guardades no es duplicaran.";
+    });
+    return;
+  }
   if (event.target.closest("[data-retry-clients]")) { showClientsView(); return; }
   const directClient = event.target.closest("[data-open-client-id]");
   if (directClient) { window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Clientes" } })); showDetail(directClient.dataset.openClientId); return; }
@@ -213,8 +235,9 @@ document.addEventListener("change", async (event) => {
   const file = event.target.files?.[0]; if (!file || !message || !results) return;
   try {
     message.textContent = "Comparant amb les clientes de TravelFlow..."; results.innerHTML = "";
-    const [text, clients] = await Promise.all([file.text(), getClients()]);
+    const [text, clients] = await Promise.all([file.text(), getClients({ force: true })]);
     const preview = previewClientImport(text, clients);
+    pendingClientImportText = text;
     results.innerHTML = renderImportPreview(preview); message.textContent = `Vista prèvia completada: ${preview.totals.NEW} clientes noves.`;
   } catch (error) {
     console.error("No s’ha pogut revisar la importació de clientes", error);
