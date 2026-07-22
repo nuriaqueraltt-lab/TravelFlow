@@ -151,6 +151,10 @@ function isBookingForSelection(lead) {
   return selectedStatus(lead) === "BOOKING_CONFIRMED";
 }
 
+function isCommercialAnalyticsLead(lead) {
+  return lead.source !== "RETURNING_CUSTOMER" || lead.analyticsIncluded === true;
+}
+
 function bookingDateForSelection(lead) {
   if (analyticsState.tripId) {
     return toDate(lead.tripInterests?.[analyticsState.tripId]?.bookedAt)
@@ -176,6 +180,7 @@ function matchesDimensionFilters(lead, { bookingTripOnly = false } = {}) {
 function filteredLeads(bounds = getDateBounds()) {
   const { start, end } = bounds;
   return analyticsState.leads.filter((lead) => {
+    if (!isCommercialAnalyticsLead(lead)) return false;
     const createdAt = toDate(lead.createdAt);
     if (!createdAt || createdAt < start || createdAt > end) return false;
     return matchesDimensionFilters(lead);
@@ -419,6 +424,7 @@ function renderEvolution() {
     grouped.set(periodKey(date, mode), { key: periodKey(date, mode), date: new Date(date), leads: 0, bookings: 0 });
   }
   analyticsState.leads.forEach((lead) => {
+    if (!isCommercialAnalyticsLead(lead)) return;
     if (!matchesDimensionFilters(lead)) return;
     const createdAt = toDate(lead.createdAt);
     if (inRange(createdAt) && grouped.has(periodKey(createdAt, mode))) rowFor(createdAt).leads += 1;

@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, limit, query, serverTimestamp,
+  collection, doc, getDoc, getDocs, limit, query, serverTimestamp, Timestamp,
   setDoc, updateDoc, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
@@ -119,7 +119,7 @@ export async function updateClient(clientId, input) {
   return saved;
 }
 
-export async function createClientReservation(clientId, trip) {
+export async function createClientReservation(clientId, trip, { historical = true, bookedOn = "" } = {}) {
   const user = getCurrentUser();
   if (!user) throw new Error("AUTH_REQUIRED");
   if (!trip?.id || !trip?.name) throw new Error("RESERVATION_TRIP_REQUIRED");
@@ -128,7 +128,8 @@ export async function createClientReservation(clientId, trip) {
   if (client.reservations?.[trip.id]) throw new Error("RESERVATION_ALREADY_EXISTS");
 
   const leadRef = doc(collection(db, "leads"));
-  const bookedAt = serverTimestamp();
+  if (historical && !bookedOn) throw new Error("RESERVATION_DATE_REQUIRED");
+  const bookedAt = historical ? Timestamp.fromDate(new Date(`${bookedOn}T12:00:00`)) : serverTimestamp();
   const priceConcepts = normalizeReservationConcepts((trip.priceConcepts || []).filter((concept) => concept.application === "REQUIRED"));
   const total = Math.round(priceConcepts.reduce((sum, concept) => concept.application === "INFORMATIONAL" ? sum : sum + concept.amount, 0) * 100) / 100;
   const reservation = {
@@ -153,7 +154,7 @@ export async function createClientReservation(clientId, trip) {
     priority: "NORMAL", temperature: "WARM", ownerId: user.uid, createdBy: user.uid, updatedBy: user.uid,
     active: true, noResponseCount: 0, nextActionTitle: "", nextActionAt: null,
     bookingTripId: trip.id, bookingTripNameSnapshot: trip.name, bookingDui: false, bookedAt,
-    clientId, createdAt: bookedAt, updatedAt: bookedAt
+    clientId, analyticsIncluded: !historical, createdAt: bookedAt, updatedAt: serverTimestamp()
   };
 
   const batch = writeBatch(db);

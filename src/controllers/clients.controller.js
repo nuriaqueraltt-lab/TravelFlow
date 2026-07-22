@@ -153,7 +153,7 @@ function renderDetail(client, trips = []) {
       <label class="client-super-toggle"><input name="superTraveler" type="checkbox" ${client.superTraveler ? "checked" : ""}><span><strong>Superviatgera</strong><small>Clienta fidel o amb tracte especial</small></span></label>
     </div><p class="client-form-message" role="status"></p></form>
     <section class="content-card client-trips"><header><div><span class="section-kicker">Historial de reserves</span><h2>Viatges</h2></div><button class="primary-button primary-button--compact" type="button" data-show-client-booking ${availableTrips.length ? "" : "disabled"}>+ Crear reserva</button></header>
-      <form class="client-new-booking" data-client-booking-form data-client-id="${client.id}" hidden><label><span>Viatge</span><select name="tripId" required><option value="">Selecciona un viatge...</option>${availableTrips.map((trip) => `<option value="${esc(trip.id)}">${esc(trip.name)}</option>`).join("")}</select></label><p role="status" data-client-booking-message></p><div><button class="secondary-button" type="button" data-cancel-client-booking>Cancel·lar</button><button class="primary-button primary-button--compact" type="submit">Crear reserva</button></div></form>
+      <form class="client-new-booking" data-client-booking-form data-client-id="${client.id}" hidden><label><span>Viatge</span><select name="tripId" required><option value="">Selecciona un viatge...</option>${availableTrips.map((trip) => `<option value="${esc(trip.id)}">${esc(trip.name)}</option>`).join("")}</select></label><label><span>Tipus de reserva</span><select name="bookingOrigin"><option value="HISTORICAL">Reserva anterior (no compta a Analítica)</option><option value="NEW">Reserva nova d'avui</option></select></label><label data-historical-booking-date><span>Data real de la reserva</span><input type="date" name="bookedOn" required></label><p role="status" data-client-booking-message></p><div><button class="secondary-button" type="button" data-cancel-client-booking>Cancel·lar</button><button class="primary-button primary-button--compact" type="submit">Crear reserva</button></div></form>
       ${availableTrips.length ? "" : '<p class="client-booking-hint">Aquesta clienta ja té reserva a tots els viatges disponibles.</p>'}${reservationRows(client)}</section></div></section>`;
 }
 
@@ -258,6 +258,14 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("change", async (event) => {
+  if (event.target.matches('[data-client-booking-form] [name="bookingOrigin"]')) {
+    const form = event.target.form;
+    const historical = event.target.value === "HISTORICAL";
+    form.querySelector("[data-historical-booking-date]").hidden = !historical;
+    form.elements.bookedOn.required = historical;
+    if (!historical) form.elements.bookedOn.value = "";
+    return;
+  }
   if (event.target.matches("[data-client-import-filter]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
   if (!event.target.matches("[data-client-import-file]")) return;
   const modal = event.target.closest("[data-client-import-modal]"); const message = modal?.querySelector("[data-client-import-message]"); const results = modal?.querySelector("[data-client-import-results]");
@@ -283,11 +291,15 @@ document.addEventListener("submit", async (event) => {
     try {
       button.disabled = true; message.textContent = "Creant reserva...";
       const trip = await getTripById(form.elements.tripId.value);
-      await createClientReservation(form.dataset.clientId, { ...trip, priceConcepts: Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS });
+      await createClientReservation(
+        form.dataset.clientId,
+        { ...trip, priceConcepts: Array.isArray(trip.priceConcepts) ? trip.priceConcepts : DEFAULT_TRIP_PRICE_CONCEPTS },
+        { historical: form.elements.bookingOrigin.value === "HISTORICAL", bookedOn: form.elements.bookedOn.value }
+      );
       await showReservation(form.dataset.clientId, trip.id);
     } catch (error) {
       button.disabled = false;
-      message.textContent = error.message === "RESERVATION_ALREADY_EXISTS" ? "Aquesta clienta ja té una reserva en aquest viatge." : "No s’ha pogut crear la reserva. Torna-ho a provar.";
+      message.textContent = error.message === "RESERVATION_ALREADY_EXISTS" ? "Aquesta clienta ja té una reserva en aquest viatge." : error.message === "RESERVATION_DATE_REQUIRED" ? "Indica la data real de la reserva anterior." : "No s’ha pogut crear la reserva. Torna-ho a provar.";
     }
     return;
   }
