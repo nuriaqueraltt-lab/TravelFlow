@@ -149,9 +149,11 @@ service cloud.firestore {
         && request.resource.data.reconciliationStatus == "PENDING"
         && request.resource.data.importedBy == request.auth.uid;
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["category", "categoryUpdatedBy", "categoryUpdatedAt"])
-        && request.resource.data.category in [
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["category", "categoryUpdatedBy", "categoryUpdatedAt"])
+            && request.resource.data.category in [
           "UNCLASSIFIED",
           "POSSIBLE_CLIENT_PAYMENT",
           "POSSIBLE_SUPPLIER_PAYMENT",
@@ -172,8 +174,41 @@ service cloud.firestore {
           "SL_SUBSCRIPTION_SERVICE",
           "REFUND",
           "OTHER"
-        ]
-        && request.resource.data.categoryUpdatedBy == request.auth.uid;
+            ]
+            && request.resource.data.categoryUpdatedBy == request.auth.uid
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "reconciliationStatus",
+              "reconciliationType",
+              "matchedMovementId",
+              "reconciledBy",
+              "reconciledAt"
+            ])
+            && request.resource.data.reconciliationStatus in ["PENDING", "MANUAL_OK", "MATCHED"]
+            && (
+              (
+                request.resource.data.reconciliationStatus == "PENDING"
+                && request.resource.data.reconciliationType == null
+                && request.resource.data.matchedMovementId == null
+                && request.resource.data.reconciledBy == null
+                && request.resource.data.reconciledAt == null
+              )
+              || (
+                request.resource.data.reconciliationStatus == "MANUAL_OK"
+                && request.resource.data.reconciliationType == "MANUAL_OK"
+                && request.resource.data.matchedMovementId == null
+                && request.resource.data.reconciledBy == request.auth.uid
+              )
+              || (
+                request.resource.data.reconciliationStatus == "MATCHED"
+                && request.resource.data.reconciliationType == "BANK_MOVEMENT"
+                && request.resource.data.matchedMovementId is string
+                && request.resource.data.reconciledBy == request.auth.uid
+              )
+            )
+          )
+        );
       allow delete: if false;
     }
 

@@ -1,5 +1,6 @@
 import {
   getTreasuryMovements, importTreasuryStatement, invalidateTreasuryMovementsCache,
+  markTreasuryMovementOk, reconcileTreasuryMovements, undoTreasuryReconciliation,
   updateTreasuryMovementCategory
 } from "../services/treasury.service.js";
 import {
@@ -91,8 +92,25 @@ function renderRows(items, account) {
     <td>${formatDate(movement.valueDate)}</td>
     <td class="treasury-amount ${movement.amount < 0 ? "is-expense" : ""}">${formatCurrency(movement.amount)}</td>
     <td>${formatCurrency(movement.balance)}</td>
-    <td><span class="treasury-status is-pending">Pendent</span></td>
+    <td>${renderReconciliation(movement)}</td>
   </tr>`).join("");
+}
+
+function renderReconciliation(movement) {
+  const status = movement.reconciliationStatus || "PENDING";
+  if (status === "MATCHED") return `<div class="treasury-reconciliation">
+    <span class="treasury-status is-reconciled">Conciliat amb moviment</span>
+    <button type="button" class="treasury-action-link" data-undo-treasury="${escapeHtml(movement.id)}">Desfer</button>
+  </div>`;
+  if (status === "MANUAL_OK") return `<div class="treasury-reconciliation">
+    <span class="treasury-status is-ok">OK · Revisat</span>
+    <button type="button" class="treasury-action-link" data-undo-treasury="${escapeHtml(movement.id)}">Desfer</button>
+  </div>`;
+  return `<div class="treasury-reconciliation">
+    <span class="treasury-status is-pending">Pendent</span>
+    <button type="button" class="treasury-action-button" data-match-treasury="${escapeHtml(movement.id)}">Conciliar amb moviment</button>
+    <button type="button" class="treasury-action-button is-ok" data-ok-treasury="${escapeHtml(movement.id)}">OK</button>
+  </div>`;
 }
 
 function renderImportResult(result) {
@@ -210,6 +228,70 @@ async function handleCategoryChange(select) {
   }
 }
 
+async function handleManualOk(movementId) {
+  if (!window.confirm("Marcar aquest moviment com a revisat i controlat?")) return;
+  try {
+    await markTreasuryMovementOk(movementId);
+    await showTreasuryView({ force: true });
+  } catch (error) {
+    console.error("No s'ha pogut marcar el moviment com a revisat:", error);
+    window.alert("No s’ha pogut guardar l’OK del moviment.");
+  }
+}
+
+function matchingCandidates(movement, candidates) {
+  const amountInCents = Math.round(Math.abs(Number(movement.amount)) * 100);
+  return candidates.filter((candidate) => (
+    (candidate.reconciliationStatus || "PENDING") === "PENDING"
+    && Number(candidate.amount) * Number(movement.amount) < 0
+    && Math.round(Math.abs(Number(candidate.amount)) * 100) === amountInCents
+  ));
+}
+
+async function handleMatchMovement(movementId) {
+  const movement = movements.find((item) => item.id === movementId);
+  if (!movement) return;
+  try {
+    const otherAccount = movement.account === "DEPOSIT" ? "SL" : "DEPOSIT";
+    const candidates = matchingCandidates(
+      movement,
+      await getTreasuryMovements({ account: otherAccount, force: true })
+    );
+    if (!candidates.length) {
+      window.alert("No hi ha cap moviment pendent de l’altre compte amb el mateix import en sentit contrari.");
+      return;
+    }
+    const candidateList = candidates.map((candidate, index) => (
+      `${index + 1}. ${formatDate(candidate.movementDate)} · ${candidate.bankMovement || "Sense concepte"}`
+      + `${candidate.moreData ? ` · ${candidate.moreData}` : ""} · ${formatCurrency(candidate.amount)}`
+    )).join("\n");
+    const selection = window.prompt(`Selecciona el moviment amb què vols conciliar-lo:\n\n${candidateList}\n\nEscriu el número:`);
+    if (selection === null) return;
+    const candidate = candidates[Number(selection) - 1];
+    if (!candidate) {
+      window.alert("La selecció no és vàlida.");
+      return;
+    }
+    if (!window.confirm(`Conciliar amb:\n${formatDate(candidate.movementDate)} · ${candidate.bankMovement || "Sense concepte"} · ${formatCurrency(candidate.amount)}?`)) return;
+    await reconcileTreasuryMovements(movementId, candidate.id);
+    await showTreasuryView({ force: true });
+  } catch (error) {
+    console.error("No s'han pogut conciliar els moviments:", error);
+    window.alert("No s’han pogut conciliar els moviments. Comprova que tots dos continuïn pendents.");
+  }
+}
+
+async function handleUndoReconciliation(movementId) {
+  if (!window.confirm("Vols tornar a deixar aquest moviment pendent?")) return;
+  try {
+    await undoTreasuryReconciliation(movementId);
+    await showTreasuryView({ force: true });
+  } catch (error) {
+    console.error("No s'ha pogut desfer la conciliació:", error);
+    window.alert("No s’ha pogut desfer la conciliació.");
+  }
+}
+
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-refresh-treasury]")) showTreasuryView({ force: true });
   if (event.target.closest("[data-import-treasury]")) document.querySelector("[data-treasury-file]")?.click();
@@ -218,6 +300,12 @@ document.addEventListener("click", (event) => {
     selectedAccount = accountButton.dataset.treasuryAccount;
     showTreasuryView();
   }
+  const matchButton = event.target.closest("[data-match-treasury]");
+  if (matchButton) handleMatchMovement(matchButton.dataset.matchTreasury);
+  const okButton = event.target.closest("[data-ok-treasury]");
+  if (okButton) handleManualOk(okButton.dataset.okTreasury);
+  const undoButton = event.target.closest("[data-undo-treasury]");
+  if (undoButton) handleUndoReconciliation(undoButton.dataset.undoTreasury);
 });
 document.addEventListener("change", (event) => {
   if (event.target.matches("[data-treasury-file]") && event.target.files?.[0]) handleImport(event.target.files[0]);

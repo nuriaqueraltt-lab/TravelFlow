@@ -1,5 +1,5 @@
 import {
-  collection, documentId, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, doc
+  collection, documentId, getDocs, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, doc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
@@ -49,6 +49,87 @@ export async function updateTreasuryMovementCategory(movementId, category) {
     category,
     categoryUpdatedBy: user.uid,
     categoryUpdatedAt: serverTimestamp()
+  });
+  invalidateTreasuryMovementsCache();
+}
+
+export async function markTreasuryMovementOk(movementId) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  await updateDoc(doc(db, "treasuryMovements", movementId), {
+    reconciliationStatus: "MANUAL_OK",
+    reconciliationType: "MANUAL_OK",
+    matchedMovementId: null,
+    reconciledBy: user.uid,
+    reconciledAt: serverTimestamp()
+  });
+  invalidateTreasuryMovementsCache();
+}
+
+export async function reconcileTreasuryMovements(movementId, matchedMovementId) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  if (!movementId || !matchedMovementId || movementId === matchedMovementId) throw new Error("TREASURY_MATCH_INVALID");
+
+  await runTransaction(db, async (transaction) => {
+    const movementRef = doc(db, "treasuryMovements", movementId);
+    const matchedRef = doc(db, "treasuryMovements", matchedMovementId);
+    const [movementSnapshot, matchedSnapshot] = await Promise.all([
+      transaction.get(movementRef),
+      transaction.get(matchedRef)
+    ]);
+    if (!movementSnapshot.exists() || !matchedSnapshot.exists()) throw new Error("TREASURY_MATCH_NOT_FOUND");
+
+    const movement = movementSnapshot.data();
+    const matched = matchedSnapshot.data();
+    const sameAbsoluteAmount = Math.round(Math.abs(Number(movement.amount)) * 100)
+      === Math.round(Math.abs(Number(matched.amount)) * 100);
+    const oppositeDirections = Number(movement.amount) * Number(matched.amount) < 0;
+    if (
+      (movement.reconciliationStatus || "PENDING") !== "PENDING"
+      || (matched.reconciliationStatus || "PENDING") !== "PENDING"
+      || movement.account === matched.account
+      || !sameAbsoluteAmount
+      || !oppositeDirections
+    ) throw new Error("TREASURY_MATCH_INVALID");
+
+    const reconciliation = {
+      reconciliationStatus: "MATCHED",
+      reconciliationType: "BANK_MOVEMENT",
+      reconciledBy: user.uid,
+      reconciledAt: serverTimestamp()
+    };
+    transaction.update(movementRef, { ...reconciliation, matchedMovementId });
+    transaction.update(matchedRef, { ...reconciliation, matchedMovementId: movementId });
+  });
+  invalidateTreasuryMovementsCache();
+}
+
+export async function undoTreasuryReconciliation(movementId) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+
+  await runTransaction(db, async (transaction) => {
+    const movementRef = doc(db, "treasuryMovements", movementId);
+    const movementSnapshot = await transaction.get(movementRef);
+    if (!movementSnapshot.exists()) throw new Error("TREASURY_MOVEMENT_NOT_FOUND");
+    const movement = movementSnapshot.data();
+    const reset = {
+      reconciliationStatus: "PENDING",
+      reconciliationType: null,
+      matchedMovementId: null,
+      reconciledBy: null,
+      reconciledAt: null
+    };
+
+    if (movement.reconciliationStatus === "MATCHED" && movement.matchedMovementId) {
+      const matchedRef = doc(db, "treasuryMovements", movement.matchedMovementId);
+      const matchedSnapshot = await transaction.get(matchedRef);
+      if (matchedSnapshot.exists() && matchedSnapshot.data().matchedMovementId === movementId) {
+        transaction.update(matchedRef, reset);
+      }
+    }
+    transaction.update(movementRef, reset);
   });
   invalidateTreasuryMovementsCache();
 }
