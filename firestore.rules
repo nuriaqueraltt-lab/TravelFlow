@@ -135,7 +135,16 @@ service cloud.firestore {
 
     match /treasuryMovements/{movementId} {
       allow read: if isStaff();
-      allow create, update, delete: if false;
+      allow create: if isAdmin()
+        && request.resource.data.account == "DEPOSIT"
+        && request.resource.data.amount is number
+        && request.resource.data.balance is number
+        && request.resource.data.movementDate is string
+        && request.resource.data.valueDate is string
+        && request.resource.data.bankMovement is string
+        && request.resource.data.reconciliationStatus == "PENDING"
+        && request.resource.data.importedBy == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /notifications/{notificationId} {

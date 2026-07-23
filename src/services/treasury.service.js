@@ -1,5 +1,8 @@
-import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {
+  collection, documentId, getDocs, query, serverTimestamp, where, writeBatch, doc
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
+import { getCurrentUser } from "./auth.service.js";
 
 let movementsCache = null;
 
@@ -25,11 +28,56 @@ export async function getTreasuryMovements({ force = false } = {}) {
   const snapshot = await getDocs(collection(db, "treasuryMovements"));
   movementsCache = snapshot.docs.map(mapMovement).sort((a, b) => {
     const dateDifference = (b.movementDate?.getTime() || 0) - (a.movementDate?.getTime() || 0);
-    return dateDifference || a.id.localeCompare(b.id);
+    const importDifference = (b.importedAt?.seconds || 0) - (a.importedAt?.seconds || 0);
+    return dateDifference || importDifference || (a.sourcePosition ?? 9999) - (b.sourcePosition ?? 9999) || a.id.localeCompare(b.id);
   });
   return movementsCache;
 }
 
 export function invalidateTreasuryMovementsCache() {
   movementsCache = null;
+}
+
+function chunks(items, size) {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+}
+
+export async function importTreasuryStatement(statement) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  const ids = statement.movements.map((movement) => movement.id);
+  const existingIds = new Set();
+
+  for (const idChunk of chunks(ids, 30)) {
+    const snapshot = await getDocs(query(
+      collection(db, "treasuryMovements"),
+      where(documentId(), "in", idChunk)
+    ));
+    snapshot.docs.forEach((item) => existingIds.add(item.id));
+  }
+
+  const newMovements = statement.movements.filter((movement) => !existingIds.has(movement.id));
+  for (const movementChunk of chunks(newMovements, 450)) {
+    const batch = writeBatch(db);
+    movementChunk.forEach(({ id, ...movement }) => {
+      batch.set(doc(db, "treasuryMovements", id), {
+        ...movement,
+        source: "BANK_STATEMENT",
+        sourceFileName: statement.fileName,
+        importedBy: user.uid,
+        importedAt: serverTimestamp()
+      });
+    });
+    await batch.commit();
+  }
+
+  invalidateTreasuryMovementsCache();
+  return {
+    read: statement.movements.length,
+    created: newMovements.length,
+    duplicates: statement.movements.length - newMovements.length,
+    firstDate: statement.firstDate,
+    lastDate: statement.lastDate,
+    finalBalance: statement.finalBalance
+  };
 }
