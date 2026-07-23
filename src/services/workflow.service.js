@@ -129,7 +129,7 @@ async function loadOpenTasks({ force = false } = {}) {
   return openTasksRequest;
 }
 
-export async function getOpenTasks({ leads = null, trips = null, runMaintenance = true, force = false } = {}) {
+export async function getOpenTasks({ leads = null, trips = null, runMaintenance = true, validateLeads = true, force = false } = {}) {
   let tasks = await loadOpenTasks({ force });
 
   if (runMaintenance && shouldRunMaintenance()) {
@@ -137,6 +137,8 @@ export async function getOpenTasks({ leads = null, trips = null, runMaintenance 
     sessionStorage.setItem(MAINTENANCE_KEY, String(Date.now()));
     if (created) tasks = await loadOpenTasks({ force: true });
   }
+
+  if (!validateLeads) return tasks;
 
   let existing;
   if (Array.isArray(leads)) {

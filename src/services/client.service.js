@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, limit, query, serverTimestamp, Timestamp,
+  collection, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, startAfter, Timestamp,
   setDoc, updateDoc, where, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
@@ -12,6 +12,8 @@ let clientsCacheLoadedAt = 0;
 let clientsRequest = null;
 const CLIENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const clientsById = new Map();
+let clientsPageCursor = null;
+let clientsPageHasMore = true;
 
 function mapDocument(snapshot) { return { id: snapshot.id, ...snapshot.data() }; }
 function clean(value) { return String(value || "").trim(); }
@@ -25,12 +27,43 @@ export function invalidateClientsCache() {
   clientsCacheComplete = false;
   clientsCacheLoadedAt = 0;
   clientsById.clear();
+  clientsPageCursor = null;
+  clientsPageHasMore = true;
+}
+
+export async function getClientsPage({ pageSize = 50, reset = false, next = false } = {}) {
+  if (reset) {
+    clientsCache = [];
+    clientsCacheComplete = false;
+    clientsPageCursor = null;
+    clientsPageHasMore = true;
+    clientsById.clear();
+  }
+  if (!reset && !next && clientsCache && Date.now() - clientsCacheLoadedAt < CLIENTS_CACHE_TTL_MS) {
+    return { items: clientsCache, hasMore: clientsPageHasMore };
+  }
+  if (!clientsPageHasMore) return { items: clientsCache || [], hasMore: false };
+  const constraints = [orderBy("fullName")];
+  if (clientsPageCursor) constraints.push(startAfter(clientsPageCursor));
+  constraints.push(limit(pageSize + 1));
+  const snapshot = await getDocs(query(collection(db, "clients"), ...constraints));
+  const hasMore = snapshot.docs.length > pageSize;
+  const pageDocs = snapshot.docs.slice(0, pageSize);
+  clientsPageCursor = pageDocs.at(-1) || clientsPageCursor;
+  clientsPageHasMore = hasMore;
+  const merged = [...(clientsCache || []), ...pageDocs.map(mapDocument).filter((client) => client.active !== false)];
+  clientsCache = [...new Map(merged.map((client) => [client.id, client])).values()]
+    .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "ca"));
+  clientsCache.forEach((client) => clientsById.set(client.id, client));
+  clientsCacheLoadedAt = Date.now();
+  clientsCacheComplete = !hasMore;
+  return { items: clientsCache, hasMore };
 }
 window.addEventListener("travelflow:clients-updated", invalidateClientsCache);
 
 export async function getClients({ force = false } = {}) {
   const cacheIsFresh = clientsCache && Date.now() - clientsCacheLoadedAt < CLIENTS_CACHE_TTL_MS;
-  if (!force && cacheIsFresh) return clientsCache;
+  if (!force && cacheIsFresh && clientsCacheComplete) return clientsCache;
   if (clientsRequest) return clientsRequest;
 
   clientsRequest = getDocs(collection(db, "clients"))

@@ -6,8 +6,11 @@ import { buildTripInterests } from "./trip-interest.model.js";
 
 const LEADS_CACHE_TTL = 5 * 60 * 1000;
 let leadsCache = null;
+let leadsCacheComplete = false;
 let leadsCacheAt = 0;
 let leadsRequest = null;
+let leadsPageCursor = null;
+let leadsPageHasMore = true;
 const tripLeadsCache = new Map();
 let confirmedBookingsCache = null;
 let confirmedBookingsCacheAt = 0;
@@ -23,10 +26,10 @@ function todayIso() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europ
 function dateAtLocalTime(value, hour = 10) { if (!value) return new Date(); const date = new Date(`${value}T${String(hour).padStart(2, "0")}:00:00`); if (Number.isNaN(date.getTime())) throw new Error("INVALID_CONTACT_DATE"); return date; }
 function addDaysFrom(baseDate, days) { const date = new Date(baseDate); date.setHours(9, 0, 0, 0); date.setDate(date.getDate() + days); return date; }
 function sortLeads(items) { return [...items].sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)); }
-function setLeadsCache(items) { leadsCache = sortLeads(items.filter((lead) => lead.active !== false)); leadsCacheAt = Date.now(); return leadsCache; }
+function setLeadsCache(items, { complete = leadsCacheComplete } = {}) { leadsCache = sortLeads(items.filter((lead) => lead.active !== false)); leadsCacheComplete = complete; leadsCacheAt = Date.now(); return leadsCache; }
 function upsertLeadCache(lead) { if (!leadsCache) return; const index = leadsCache.findIndex((item) => item.id === lead.id); if (index >= 0) leadsCache[index] = { ...leadsCache[index], ...lead }; else leadsCache.unshift(lead); leadsCache = sortLeads(leadsCache.filter((item) => item.active !== false)); leadsCacheAt = Date.now(); }
 export function patchLeadCache(leadId, update) { if (!leadId || !update) return; upsertLeadCache({ id: leadId, ...update }); }
-export function invalidateLeadsCache() { leadsCache = null; leadsCacheAt = 0; leadsRequest = null; tripLeadsCache.clear(); confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null; }
+export function invalidateLeadsCache() { leadsCache = null; leadsCacheComplete = false; leadsCacheAt = 0; leadsRequest = null; leadsPageCursor = null; leadsPageHasMore = true; tripLeadsCache.clear(); confirmedBookingsCache = null; confirmedBookingsCacheAt = 0; confirmedBookingsRequest = null; }
 window.addEventListener("travelflow:leads-updated", invalidateLeadsCache);
 
 export async function getConfirmedBookings({ force = false } = {}) {
@@ -155,7 +158,29 @@ export async function rejectLeadClientMatch(leadId, clientId) {
   invalidateLeadsCache();
 }
 
-export async function getLeads({ force = false } = {}) { if (!force && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache; if (!force && leadsRequest) return leadsRequest; leadsRequest = getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc"))).then((snapshot) => setLeadsCache(snapshot.docs.map(mapDocument))).finally(() => { leadsRequest = null; }); return leadsRequest; }
+export async function getLeads({ force = false } = {}) { if (!force && leadsCacheComplete && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) return leadsCache; if (!force && leadsRequest) return leadsRequest; leadsRequest = getDocs(query(collection(db, "leads"), orderBy("createdAt", "desc"))).then((snapshot) => { leadsPageHasMore = false; leadsPageCursor = snapshot.docs.at(-1) || null; return setLeadsCache(snapshot.docs.map(mapDocument), { complete: true }); }).finally(() => { leadsRequest = null; }); return leadsRequest; }
+export async function getLeadsPage({ pageSize = 50, reset = false, next = false } = {}) {
+  if (reset) {
+    leadsCache = [];
+    leadsPageCursor = null;
+    leadsPageHasMore = true;
+  }
+  if (!reset && !next && leadsCache && Date.now() - leadsCacheAt < LEADS_CACHE_TTL) {
+    return { items: leadsCache, hasMore: leadsPageHasMore };
+  }
+  if (!leadsPageHasMore) return { items: leadsCache || [], hasMore: false };
+  const constraints = [orderBy("createdAt", "desc")];
+  if (leadsPageCursor) constraints.push(startAfter(leadsPageCursor));
+  constraints.push(limit(pageSize + 1));
+  const snapshot = await getDocs(query(collection(db, "leads"), ...constraints));
+  const hasMore = snapshot.docs.length > pageSize;
+  const pageDocs = snapshot.docs.slice(0, pageSize);
+  leadsPageCursor = pageDocs.at(-1) || leadsPageCursor;
+  leadsPageHasMore = hasMore;
+  const merged = [...(leadsCache || []), ...pageDocs.map(mapDocument)];
+  setLeadsCache([...new Map(merged.map((lead) => [lead.id, lead])).values()], { complete: !hasMore });
+  return { items: leadsCache, hasMore };
+}
 export async function getLeadById(leadId, { force = false } = {}) { if (!force && leadsCache) { const cached = leadsCache.find((lead) => lead.id === leadId); if (cached) return cached; } const snapshot = await getDoc(doc(db, "leads", leadId)); const lead = snapshot.exists() ? mapDocument(snapshot) : null; if (lead) upsertLeadCache(lead); return lead; }
 export async function getLeadActivities(leadId, { pageSize = 30, cursor = null } = {}) {
   const constraints = [where("leadId", "==", leadId), orderBy("createdAt", "desc")];

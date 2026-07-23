@@ -1,11 +1,10 @@
-import { getLeadActivities, getLeadById, getLeadErrorMessage, getLeads, updateLead } from "../services/lead.service.js";
+import { getLeadActivities, getLeadById, getLeadErrorMessage, getLeads, getLeadsPage, updateLead } from "../services/lead.service.js";
 import { updateLeadEntryChannel } from "../services/lead-channel.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTrips } from "../services/trip.service.js";
 import { LEAD_CHANNELS, LEAD_SOURCES } from "../config/app.constants.js";
 import {
   addExpiredLeadToNextYear,
   declineExpiredLeadNextYear,
-  ensureExpiredLeadNextYearTasks,
   getExpiredLeadFollowUpError
 } from "../services/expired-lead-followup.service.js";
 import {
@@ -63,6 +62,8 @@ let currentActivities = [];
 let currentActivityCursor = null;
 let currentActivitiesHasMore = false;
 let currentLeadTasks = [];
+let leadsHasMore = false;
+let loadingAllLeads = null;
 
 function root() { return document.querySelector(".app-content"); }
 function formatDate(value, withTime = false) {
@@ -113,10 +114,10 @@ function getTripFilterOptions(leads) {
   return [...trips.entries()].sort((a, b) => a[1].localeCompare(b[1], "ca"));
 }
 function renderList(leads) {
-  const origins = [...new Set(leads.map((lead) => lead.source || lead.channel || "OTHER"))].sort((a, b) => (SOURCE_LABELS[a] || CHANNEL_LABELS[a] || a).localeCompare(SOURCE_LABELS[b] || CHANNEL_LABELS[b] || b, "ca"));
+  const origins = [...new Set([...Object.keys(SOURCE_LABELS), ...Object.keys(CHANNEL_LABELS)])].sort((a, b) => (SOURCE_LABELS[a] || CHANNEL_LABELS[a] || a).localeCompare(SOURCE_LABELS[b] || CHANNEL_LABELS[b] || b, "ca"));
   const originLabels = { ...CHANNEL_LABELS, ...SOURCE_LABELS };
-  const tripOptions = getTripFilterOptions(leads).map(([tripId, label]) => `<option value="${escapeHtml(tripId)}">${escapeHtml(label)}</option>`).join("");
-  return `<section class="leads-page"><header class="page-heading"><div><span class="section-kicker">Gestió comercial</span><h1>Futures viatgeres</h1><p>Cerca, filtra i obre qualsevol historial comercial.</p></div><button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button></header><section class="leads-toolbar"><label class="leads-search leads-toolbar__field"><span>Cerca</span><input id="leadsSearch" type="search" placeholder="Nom, telèfon, correu o viatge..." /></label><label class="leads-toolbar__field"><span>Origen</span><select id="leadsSourceFilter" class="leads-filter">${renderFilterOptions(origins, originLabels, "Tots els orígens")}</select></label><label class="leads-toolbar__field"><span>Viatge</span><select id="leadsTripFilter" class="leads-filter"><option value="">Tots els viatges</option>${tripOptions}</select></label><label class="leads-toolbar__field"><span>Estat</span><select id="leadsStatusFilter" class="leads-filter">${renderFilterOptions(Object.keys(STATUS_LABELS), STATUS_LABELS, "Tots els estats")}</select></label><div class="leads-toolbar__actions"><div class="leads-count"><strong id="leadsCount">${leads.length}</strong> registrades</div><button class="secondary-button leads-clear-filters" type="button" data-clear-lead-filters>Netejar</button></div></section><section class="leads-table-card"><div class="leads-table-head"><span>Futura viatgera</span><span>Viatge</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div><div id="leadsRows">${renderRows(leads)}</div></section></section>`;
+  const tripOptions = tripsCache.map((trip) => `<option value="${escapeHtml(trip.id)}">${escapeHtml(trip.name)}</option>`).join("");
+  return `<section class="leads-page"><header class="page-heading"><div><span class="section-kicker">Gestió comercial</span><h1>Futures viatgeres</h1><p>Cerca, filtra i obre qualsevol historial comercial.</p></div><button class="primary-button primary-button--compact" type="button" data-open-new-lead>+ Nova futura viatgera</button></header><section class="leads-toolbar"><label class="leads-search leads-toolbar__field"><span>Cerca</span><input id="leadsSearch" type="search" placeholder="Nom, telèfon, correu o viatge..." /></label><label class="leads-toolbar__field"><span>Origen</span><select id="leadsSourceFilter" class="leads-filter">${renderFilterOptions(origins, originLabels, "Tots els orígens")}</select></label><label class="leads-toolbar__field"><span>Viatge</span><select id="leadsTripFilter" class="leads-filter"><option value="">Tots els viatges</option>${tripOptions}</select></label><label class="leads-toolbar__field"><span>Estat</span><select id="leadsStatusFilter" class="leads-filter">${renderFilterOptions(Object.keys(STATUS_LABELS), STATUS_LABELS, "Tots els estats")}</select></label><div class="leads-toolbar__actions"><div class="leads-count"><strong id="leadsCount">${leads.length}</strong> carregades</div><button class="secondary-button leads-clear-filters" type="button" data-clear-lead-filters>Netejar</button></div></section><section class="leads-table-card"><div class="leads-table-head"><span>Futura viatgera</span><span>Viatge</span><span>Canal</span><span>Estat</span><span>Pròxima acció</span><span></span></div><div id="leadsRows">${renderRows(leads)}</div>${leadsHasMore ? '<div class="leads-pagination"><button class="secondary-button" type="button" data-load-more-leads>Carregar-ne més</button></div>' : ""}</section></section>`;
 }
 function renderTimeline(activities, tasks) {
   const items = [...activities.map((item) => ({ ...item, timelineDate: item.createdAt, pending: false })), ...tasks.filter((task) => task.status === "PENDING").map((task) => ({ description: task.title, timelineDate: task.dueAt, pending: true }))].sort((a, b) => (a.timelineDate?.toMillis?.() ?? 0) - (b.timelineDate?.toMillis?.() ?? 0));
@@ -177,7 +178,12 @@ async function refreshDetail() {
   currentLeadTasks = tasks;
   root().innerHTML = renderDetail(lead, currentActivities, currentLeadTasks);
 }
-export async function showLeadsView() { root().innerHTML = loading(); try { leadsCache = await getLeads(); await ensureExpiredLeadNextYearTasks(); root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
+export async function showLeadsView() { root().innerHTML = loading(); try { const [page, trips] = await Promise.all([getLeadsPage(), getTrips()]); leadsCache = page.items; leadsHasMore = page.hasMore; tripsCache = trips; root().innerHTML = renderList(leadsCache); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
+async function ensureAllLeadsLoaded() {
+  if (!leadsHasMore) return;
+  if (!loadingAllLeads) loadingAllLeads = getLeads().then((items) => { leadsCache = items; leadsHasMore = false; }).finally(() => { loadingAllLeads = null; });
+  await loadingAllLeads;
+}
 export async function showLeadDetail(leadId) { currentLeadId = leadId; root().innerHTML = loading(); try { await refreshDetail(); } catch (error) { root().innerHTML = `<div class="leads-error">${getLeadErrorMessage(error)}</div>`; } }
 function filterRows() {
   const search = normalizeText(document.querySelector("#leadsSearch")?.value || "");
@@ -216,6 +222,15 @@ async function runQuickAction(action) {
 document.addEventListener("click", async (event) => {
   const nav = event.target.closest(".sidebar-nav__item");
   if (nav?.textContent.trim().startsWith("Leads")) { showLeadsView(); return; }
+  const loadMore = event.target.closest("[data-load-more-leads]");
+  if (loadMore) {
+    loadMore.disabled = true;
+    const page = await getLeadsPage({ next: true });
+    leadsCache = page.items;
+    leadsHasMore = page.hasMore;
+    root().innerHTML = renderList(leadsCache);
+    return;
+  }
   const row = event.target.closest("[data-lead-id]"); if (row) { showLeadDetail(row.dataset.leadId); return; }
   if (event.target.closest("[data-back-to-leads]")) { currentLeadId = null; showLeadsView(); return; }
   if (event.target.closest("[data-edit-lead]")) { const lead = await getLeadById(currentLeadId); document.querySelector("#leadEditPanel").innerHTML = renderEditForm(lead); return; }
@@ -266,9 +281,9 @@ document.addEventListener("click", async (event) => {
   }
   const action = event.target.closest("[data-action]"); if (action) runQuickAction(action.dataset.action);
 });
-document.addEventListener("input", (event) => { if (event.target.id === "leadsSearch") filterRows(); if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target); });
-document.addEventListener("change", (event) => {
-  if (event.target.matches("#leadsSourceFilter, #leadsTripFilter, #leadsStatusFilter")) filterRows();
+document.addEventListener("input", async (event) => { if (event.target.id === "leadsSearch") { await ensureAllLeadsLoaded(); document.querySelector(".leads-pagination")?.remove(); filterRows(); } if (event.target.matches(".lead-edit-form [data-trip-tag-search]")) filterEditTripOptions(event.target); });
+document.addEventListener("change", async (event) => {
+  if (event.target.matches("#leadsSourceFilter, #leadsTripFilter, #leadsStatusFilter")) { await ensureAllLeadsLoaded(); document.querySelector(".leads-pagination")?.remove(); filterRows(); }
   if (event.target.matches('.lead-booking-form select[name="tripId"]')) {
     event.target.closest("form").querySelectorAll("[data-booking-pricing]").forEach((section) => { section.hidden = section.dataset.bookingPricing !== event.target.value; });
     refreshBookingTotal(event.target.closest("form"));

@@ -1,4 +1,4 @@
-import { cancelClientReservation, createClientReservation, getClient, getClients, updateClient, updateClientReservation } from "../services/client.service.js";
+import { cancelClientReservation, createClientReservation, getClient, getClients, getClientsPage, updateClient, updateClientReservation } from "../services/client.service.js";
 import { DEFAULT_TRIP_PRICE_CONCEPTS, getTripById, getTrips } from "../services/trip.service.js";
 import { LEGACY_PAYMENT_METHODS, PAYMENT_METHODS } from "../config/app.constants.js";
 import { previewClientImport, readClientImportFile } from "../services/client-import-preview.service.js";
@@ -7,6 +7,9 @@ import { getLeads, linkLeadToClient, rejectLeadClientMatch } from "../services/l
 import { findUnlinkedLeadClientMatches } from "../services/client-lead-match.service.js";
 
 let pendingClientImportText = "";
+let visibleClients = [];
+let clientsHasMore = false;
+let loadingAllClients = null;
 
 const appContent = () => document.querySelector(".app-content");
 const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -46,7 +49,7 @@ function renderList(clients) {
   return `<section class="clients-page">
     <header class="page-heading clients-heading"><div><span class="section-kicker">Viatgeres confirmades</span><h1>Clientes</h1><p>Dades personals i viatges reservats en un únic lloc.</p></div><div class="clients-heading__actions"><button class="secondary-button" type="button" data-open-client-matches>Revisar coincidències</button><button class="secondary-button" type="button" data-open-client-import>Importar clientes</button><div class="clients-count"><strong>${clients.length}</strong><span>clientes</span></div></div></header>
     <section class="clients-toolbar"><label><span>Buscar clienta</span><input id="clientsSearch" type="search" placeholder="Nom, telèfon, correu o DNI..." autocomplete="off"></label><label class="clients-check"><input id="superTravelerFilter" type="checkbox"><span>Només superviatgeres</span></label></section>
-    <section class="clients-table-card"><div class="clients-table-head"><span>Clienta</span><span>Contacte</span><span>Viatges</span><span>Pagaments</span><span></span></div><div id="clientsRows">${clients.map(renderRow).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div></section>
+    <section class="clients-table-card"><div class="clients-table-head"><span>Clienta</span><span>Contacte</span><span>Viatges</span><span>Pagaments</span><span></span></div><div id="clientsRows">${clients.map(renderRow).join("") || '<div class="clients-empty"><h2>Encara no hi ha clientes</h2><p>Quan confirmis una reserva, la fitxa es crearà automàticament.</p></div>'}</div>${clientsHasMore ? '<div class="leads-pagination"><button class="secondary-button" type="button" data-load-more-clients>Carregar-ne més</button></div>' : ""}</section>
   </section>`;
 }
 
@@ -110,8 +113,10 @@ export async function showClientsView() {
   if (!root) return;
   root.innerHTML = '<div class="leads-loading"><span class="leads-loading__spinner"></span><p>Carregant clientes...</p></div>';
   try {
-    const clients = await getClients();
-    root.innerHTML = renderList(clients);
+    const page = await getClientsPage();
+    visibleClients = page.items;
+    clientsHasMore = page.hasMore;
+    root.innerHTML = renderList(visibleClients);
   }
   catch (error) {
     console.error("No s’han pogut carregar les clientes", error);
@@ -213,15 +218,34 @@ async function showReservation(clientId, tripId) {
   if (loyaltyDiscountAmount) loyaltyDiscountAmount.min = "-1000000";
 }
 
-document.addEventListener("input", (event) => {
+async function ensureAllClientsLoaded() {
+  if (!clientsHasMore) return;
+  if (!loadingAllClients) loadingAllClients = getClients().then((clients) => { visibleClients = clients; clientsHasMore = false; }).finally(() => { loadingAllClients = null; });
+  await loadingAllClients;
+}
+
+document.addEventListener("input", async (event) => {
   if (event.target.matches("[data-client-import-search]")) { filterImportRows(event.target.closest("[data-client-import-modal]")); return; }
   if (!event.target.matches("#clientsSearch, #superTravelerFilter")) return;
+  await ensureAllClientsLoaded();
+  document.querySelector(".clients-table-card .leads-pagination")?.remove();
+  const rows = document.querySelector("#clientsRows");
+  if (rows) rows.innerHTML = visibleClients.map(renderRow).join("");
   const query = document.querySelector("#clientsSearch")?.value.trim().toLowerCase() || "";
   const superOnly = document.querySelector("#superTravelerFilter")?.checked;
   document.querySelectorAll(".client-row").forEach((row) => { row.hidden = !row.dataset.search.includes(query) || (superOnly && row.dataset.super !== "true"); });
 });
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
+  const loadMoreClients = event.target.closest("[data-load-more-clients]");
+  if (loadMoreClients) {
+    loadMoreClients.disabled = true;
+    const page = await getClientsPage({ next: true });
+    visibleClients = page.items;
+    clientsHasMore = page.hasMore;
+    appContent().innerHTML = renderList(visibleClients);
+    return;
+  }
   const openMatches = event.target.closest("[data-open-client-matches]");
   if (openMatches) {
     openMatches.disabled = true;
