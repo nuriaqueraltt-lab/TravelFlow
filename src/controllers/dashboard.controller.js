@@ -1,9 +1,12 @@
 import { getOpenTasks } from "../services/workflow.service.js";
 import { getTrips } from "../services/trip.service.js";
+import { getLeads } from "../services/lead.service.js";
 import { showLeadDetail } from "./leads.controller.js";
 import { showLeadsForTrip } from "./trip-leads.controller.js?v=20260722-4";
+import { hasActiveTripInterests } from "../services/trip-interest.model.js";
 
 const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
+const TERMINAL_STATUSES = new Set(["LOST", "BOOKING_CONFIRMED"]);
 let dashboardLoading = false;
 let dashboardLoaded = false;
 let dashboardData = null;
@@ -19,6 +22,14 @@ function safeImageUrl(value = "", seed = "travel") {
   const clean = String(value || "").trim();
   if (/^https?:\/\//i.test(clean)) return clean;
   return `https://picsum.photos/seed/${encodeURIComponent(seed)}/1000/700`;
+}
+
+function filterCommercialTasks(tasks, leads) {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  return tasks.filter((task) => {
+    const lead = leadById.get(task.leadId);
+    return lead && lead.active !== false && (!TERMINAL_STATUSES.has(lead.status) || hasActiveTripInterests(lead));
+  });
 }
 
 function renderTask(task, todayStart, todayEnd) {
@@ -62,10 +73,9 @@ export async function showDailyDashboard({ force = false } = {}) {
   window.dispatchEvent(new CustomEvent("travelflow:navigation", { detail: { label: "Dashboard" } }));
   root().innerHTML = `<section class="dashboard-view"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la teva llista de feina...</p></div></section>`;
   try {
-    const [tasks, trips] = await Promise.all([
-      getOpenTasks({ runMaintenance: false, validateLeads: false, force }),
-      getTrips({ force })
-    ]);
+    const [leads, trips] = await Promise.all([getLeads({ force }), getTrips({ force })]);
+    const openTasks = await getOpenTasks({ leads, trips, runMaintenance: false, force });
+    const tasks = filterCommercialTasks(openTasks, leads);
     dashboardData = { trips, tasks };
     dashboardDataAt = Date.now();
     root().innerHTML = renderDashboard(tasks, trips);
