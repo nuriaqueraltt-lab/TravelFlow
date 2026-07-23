@@ -41,6 +41,9 @@
 .treasury-table-card td:nth-child(2) small { margin-top: 4px; color: #87918b; }
 .treasury-category, .treasury-status { display: inline-flex; width: max-content; padding: 6px 9px; border-radius: 999px; font-size: .7rem; font-weight: 850; }
 .treasury-category { background: #edf3ef; color: #365746; }
+.treasury-category-select { width: 100%; min-width: 190px; min-height: 38px; padding: 0 32px 0 10px; border: 1px solid #d8e2dc; border-radius: 10px; background: #f7faf8; color: #365746; font: inherit; font-size: .75rem; font-weight: 800; }
+.treasury-category-select:focus { border-color: #71927f; outline: 3px solid rgba(113, 146, 127, .14); }
+.treasury-category-select:disabled { cursor: wait; opacity: .65; }
 .treasury-status.is-pending { background: #fff3df; color: #8b5d14; }
 .treasury-amount { color: #2f6c4c !important; font-weight: 900; white-space: nowrap; }
 .treasury-amount.is-expense { color: #a64f4f !important; }

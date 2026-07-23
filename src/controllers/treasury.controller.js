@@ -1,19 +1,24 @@
 import {
-  getTreasuryMovements, importTreasuryStatement, invalidateTreasuryMovementsCache
+  getTreasuryMovements, importTreasuryStatement, invalidateTreasuryMovementsCache,
+  updateTreasuryMovementCategory
 } from "../services/treasury.service.js";
 import {
   getTreasuryImportErrorMessage, parseTreasuryStatement
 } from "../services/treasury-import.service.js";
 
 const CATEGORY_LABELS = {
+  UNCLASSIFIED: "Pendent de classificar",
+  POSSIBLE_CLIENT_PAYMENT: "Cobrament de clienta",
+  POSSIBLE_SUPPLIER_PAYMENT: "Pagament a proveïdor",
   INTERNAL_TRANSFER: "Moviment intern",
   BANK_EXPENSE: "Despesa bancària",
   PAYMENT_GATEWAY: "Passarel·la web",
   PAYMENT_GATEWAY_REFUND: "Devolució passarel·la",
   DEPOSIT_CARD_PURCHASE: "Compra targeta dipòsits",
-  POSSIBLE_CLIENT_PAYMENT: "Possible cobrament clienta",
-  POSSIBLE_SUPPLIER_PAYMENT: "Possible pagament proveïdor"
+  REFUND: "Devolució",
+  OTHER: "Altres"
 };
+const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS);
 
 let movements = [];
 
@@ -54,7 +59,9 @@ function renderRows(items) {
   return items.map((movement) => `<tr data-treasury-row data-direction="${movement.direction || (movement.amount < 0 ? "EXIT" : "ENTRY")}" data-category="${escapeHtml(movement.category || "")}" data-search="${escapeHtml(`${movement.bankMovement || ""} ${movement.moreData || ""}`.toLowerCase())}">
     <td>${formatDate(movement.movementDate)}</td>
     <td><strong>${escapeHtml(movement.bankMovement || "Sense concepte")}</strong>${movement.moreData ? `<small>${escapeHtml(movement.moreData)}</small>` : ""}</td>
-    <td><span class="treasury-category">${escapeHtml(CATEGORY_LABELS[movement.category] || "Pendent de classificar")}</span></td>
+    <td><select class="treasury-category-select" data-treasury-category-select data-movement-id="${escapeHtml(movement.id)}" aria-label="Classificació del moviment">
+      ${CATEGORY_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === (movement.category || "UNCLASSIFIED") ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+    </select></td>
     <td>${formatDate(movement.valueDate)}</td>
     <td class="treasury-amount ${movement.amount < 0 ? "is-expense" : ""}">${formatCurrency(movement.amount)}</td>
     <td>${formatCurrency(movement.balance)}</td>
@@ -75,7 +82,6 @@ function renderImportResult(result) {
 }
 
 function renderTreasury(items, importResult = null) {
-  const categories = [...new Set(items.map((item) => item.category).filter(Boolean))];
   return `<section class="treasury-page">
     <header class="page-heading treasury-heading">
       <div><span class="section-kicker">Control bancari</span><h1>Tresoreria</h1><p>Moviments reals del compte de dipòsits i estat de conciliació.</p></div>
@@ -93,9 +99,9 @@ function renderTreasury(items, importResult = null) {
       <div class="treasury-filters">
         <label><span>Buscar</span><input type="search" data-treasury-search placeholder="Moviment o més dades..."></label>
         <label><span>Tipus</span><select data-treasury-direction><option value="">Tots</option><option value="ENTRY">Entrades</option><option value="EXIT">Sortides</option></select></label>
-        <label><span>Categoria</span><select data-treasury-category><option value="">Totes</option>${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(CATEGORY_LABELS[category] || category)}</option>`).join("")}</select></label>
+        <label><span>Categoria</span><select data-treasury-category><option value="">Totes</option>${CATEGORY_OPTIONS.map(([category, label]) => `<option value="${escapeHtml(category)}">${escapeHtml(label)}</option>`).join("")}</select></label>
       </div>
-      <div class="treasury-table-scroll"><table><thead><tr><th>Data</th><th>Moviment</th><th>Categoria inicial</th><th>Data valor</th><th>Import</th><th>Saldo</th><th>Conciliació</th></tr></thead><tbody>${renderRows(items)}</tbody></table></div>
+      <div class="treasury-table-scroll"><table><thead><tr><th>Data</th><th>Moviment</th><th>Classificació</th><th>Data valor</th><th>Import</th><th>Saldo</th><th>Conciliació</th></tr></thead><tbody>${renderRows(items)}</tbody></table></div>
     </section>
   </section>`;
 }
@@ -151,6 +157,25 @@ async function handleImport(file) {
   }
 }
 
+async function handleCategoryChange(select) {
+  const movementId = select.dataset.movementId;
+  const row = select.closest("[data-treasury-row]");
+  const previousCategory = row?.dataset.category || "UNCLASSIFIED";
+  if (!movementId || select.value === previousCategory) return;
+  select.disabled = true;
+  try {
+    await updateTreasuryMovementCategory(movementId, select.value);
+    if (row) row.dataset.category = select.value;
+    applyFilters();
+  } catch (error) {
+    console.error("No s'ha pogut actualitzar la classificació:", error);
+    select.value = previousCategory;
+    window.alert("No s’ha pogut guardar la classificació del moviment.");
+  } finally {
+    select.disabled = false;
+  }
+}
+
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-refresh-treasury]")) showTreasuryView({ force: true });
   if (event.target.closest("[data-import-treasury]")) document.querySelector("[data-treasury-file]")?.click();
@@ -158,6 +183,7 @@ document.addEventListener("click", (event) => {
 document.addEventListener("change", (event) => {
   if (event.target.matches("[data-treasury-file]") && event.target.files?.[0]) handleImport(event.target.files[0]);
   if (event.target.matches("[data-treasury-direction], [data-treasury-category]")) applyFilters();
+  if (event.target.matches("[data-treasury-category-select]")) handleCategoryChange(event.target);
 });
 document.addEventListener("input", (event) => {
   if (event.target.matches("[data-treasury-search]")) applyFilters();

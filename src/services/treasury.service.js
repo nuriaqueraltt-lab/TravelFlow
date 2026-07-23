@@ -1,5 +1,5 @@
 import {
-  collection, documentId, getDocs, query, serverTimestamp, where, writeBatch, doc
+  collection, documentId, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, doc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
@@ -36,6 +36,17 @@ export async function getTreasuryMovements({ force = false } = {}) {
 
 export function invalidateTreasuryMovementsCache() {
   movementsCache = null;
+}
+
+export async function updateTreasuryMovementCategory(movementId, category) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  await updateDoc(doc(db, "treasuryMovements", movementId), {
+    category,
+    categoryUpdatedBy: user.uid,
+    categoryUpdatedAt: serverTimestamp()
+  });
+  invalidateTreasuryMovementsCache();
 }
 
 function chunks(items, size) {

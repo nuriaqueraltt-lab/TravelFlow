@@ -31,7 +31,7 @@ function isoDate(value, XLSX) {
 
 function classifyMovement(movement, moreData, amount) {
   const text = normalizeKey(`${movement} ${moreData}`);
-  if (text.includes("traspaso")) return "INTERNAL_TRANSFER";
+  if (text.includes("traspaso")) return "UNCLASSIFIED";
   if (text.includes("interes") || text.includes("comision")) return "BANK_EXPENSE";
   if (text.includes("comercia global payments") || /^web\d+/i.test(clean(movement))) {
     return amount < 0 ? "PAYMENT_GATEWAY_REFUND" : "PAYMENT_GATEWAY";
