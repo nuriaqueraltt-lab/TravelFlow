@@ -76,7 +76,7 @@ function renderSummary(items, account) {
     </article>
     <article class="treasury-metric"><span>Entrades importades</span><strong>${formatCurrency(totals.income)}</strong></article>
     <article class="treasury-metric"><span>Sortides importades</span><strong>${formatCurrency(totals.expenses)}</strong></article>
-    <article class="treasury-metric is-pending"><span>Pendents de conciliar</span><strong>${totals.pending}</strong></article>
+    <article class="treasury-metric is-pending"><span>Pendents de comprovar</span><strong>${totals.pending}</strong></article>
   </section>`;
 }
 
@@ -220,15 +220,22 @@ async function handleCategoryChange(select) {
 }
 
 async function handleCheckedChange(checkbox) {
+  const movementId = checkbox.dataset.treasuryChecked;
+  const movement = movements.find((item) => item.id === movementId);
+  const previousStatus = movement?.reconciliationStatus || "PENDING";
   checkbox.disabled = true;
   try {
-    await setTreasuryMovementChecked(checkbox.dataset.treasuryChecked, checkbox.checked);
-    await showTreasuryView({ force: true });
+    await setTreasuryMovementChecked(movementId, checkbox.checked);
+    if (movement) movement.reconciliationStatus = checkbox.checked ? "MANUAL_OK" : "PENDING";
+    const summaryElement = document.querySelector(".treasury-summary");
+    if (summaryElement) summaryElement.outerHTML = renderSummary(movements, selectedAccount);
   } catch (error) {
     console.error("No s'ha pogut actualitzar l'estat comprovat:", error);
+    if (movement) movement.reconciliationStatus = previousStatus;
     checkbox.checked = !checkbox.checked;
-    checkbox.disabled = false;
     window.alert("No s’ha pogut guardar l’estat del moviment.");
+  } finally {
+    checkbox.disabled = false;
   }
 }
 

@@ -42,6 +42,16 @@ export function invalidateTreasuryMovementsCache() {
   movementsCache.clear();
 }
 
+function patchCachedMovement(movementId, update) {
+  movementsCache.forEach((items, account) => {
+    const index = items.findIndex((movement) => movement.id === movementId);
+    if (index < 0) return;
+    const nextItems = [...items];
+    nextItems[index] = { ...nextItems[index], ...update };
+    movementsCache.set(account, nextItems);
+  });
+}
+
 export async function updateTreasuryMovementCategory(movementId, category) {
   const user = getCurrentUser();
   if (!user) throw new Error("AUTH_REQUIRED");
@@ -50,7 +60,7 @@ export async function updateTreasuryMovementCategory(movementId, category) {
     categoryUpdatedBy: user.uid,
     categoryUpdatedAt: serverTimestamp()
   });
-  invalidateTreasuryMovementsCache();
+  patchCachedMovement(movementId, { category, categoryUpdatedBy: user.uid });
 }
 
 export async function setTreasuryMovementChecked(movementId, checked) {
@@ -63,7 +73,13 @@ export async function setTreasuryMovementChecked(movementId, checked) {
     reconciledBy: checked ? user.uid : null,
     reconciledAt: checked ? serverTimestamp() : null
   });
-  invalidateTreasuryMovementsCache();
+  patchCachedMovement(movementId, {
+    reconciliationStatus: checked ? "MANUAL_OK" : "PENDING",
+    reconciliationType: checked ? "MANUAL_OK" : null,
+    matchedMovementId: null,
+    reconciledBy: checked ? user.uid : null,
+    reconciledAt: checked ? new Date() : null
+  });
 }
 
 function chunks(items, size) {
