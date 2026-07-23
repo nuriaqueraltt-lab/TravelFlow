@@ -185,7 +185,7 @@ service cloud.firestore {
               "reconciledBy",
               "reconciledAt"
             ])
-            && request.resource.data.reconciliationStatus in ["PENDING", "MANUAL_OK", "MATCHED"]
+            && request.resource.data.reconciliationStatus in ["PENDING", "MANUAL_OK"]
             && (
               (
                 request.resource.data.reconciliationStatus == "PENDING"
@@ -198,12 +198,6 @@ service cloud.firestore {
                 request.resource.data.reconciliationStatus == "MANUAL_OK"
                 && request.resource.data.reconciliationType == "MANUAL_OK"
                 && request.resource.data.matchedMovementId == null
-                && request.resource.data.reconciledBy == request.auth.uid
-              )
-              || (
-                request.resource.data.reconciliationStatus == "MATCHED"
-                && request.resource.data.reconciliationType == "BANK_MOVEMENT"
-                && request.resource.data.matchedMovementId is string
                 && request.resource.data.reconciledBy == request.auth.uid
               )
             )

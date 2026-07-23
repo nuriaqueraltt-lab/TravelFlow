@@ -52,13 +52,10 @@
 .treasury-category-select:focus { border-color: #71927f; outline: 3px solid rgba(113, 146, 127, .14); }
 .treasury-category-select:disabled { cursor: wait; opacity: .65; }
 .treasury-status.is-pending { background: #fff3df; color: #8b5d14; }
-.treasury-status.is-reconciled { background: #e7f3eb; color: #2f6949; }
-.treasury-status.is-ok { background: #e9f0f8; color: #3e617f; }
-.treasury-reconciliation { display: grid; justify-items: start; min-width: 178px; gap: 7px; }
-.treasury-action-button { width: 100%; padding: 7px 10px; border: 1px solid #d8e2dc; border-radius: 9px; background: #fff; color: #365746; font: inherit; font-size: .7rem; font-weight: 800; cursor: pointer; }
-.treasury-action-button:hover { border-color: #71927f; background: #f4f8f5; }
-.treasury-action-button.is-ok { border-color: #c8d9e8; background: #f2f7fb; color: #3e617f; }
-.treasury-action-link { padding: 0; border: 0; background: transparent; color: #6b7d73; font: inherit; font-size: .68rem; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.treasury-checked-control { display: inline-flex; align-items: center; gap: 8px; color: #52645a; font-size: .76rem; font-weight: 850; cursor: pointer; }
+.treasury-checked-control input { width: 18px; height: 18px; margin: 0; accent-color: #3f7359; cursor: pointer; }
+.treasury-checked-control input:disabled { cursor: wait; opacity: .6; }
+.treasury-checked-control:has(input:checked) { color: #2f6949; }
 .treasury-amount { color: #2f6c4c !important; font-weight: 900; white-space: nowrap; }
 .treasury-amount.is-expense { color: #a64f4f !important; }
 .treasury-empty { display: grid; justify-items: center; padding: 46px 20px; color: #7a867f; text-align: center; gap: 7px; }
