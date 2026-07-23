@@ -4,7 +4,7 @@ import {
 import { db } from "./firebase.service.js";
 import { getCurrentUser } from "./auth.service.js";
 
-let movementsCache = null;
+const movementsCache = new Map();
 
 function toDate(value) {
   if (!value) return null;
@@ -23,19 +23,23 @@ function mapMovement(snapshot) {
   };
 }
 
-export async function getTreasuryMovements({ force = false } = {}) {
-  if (!force && movementsCache) return movementsCache;
-  const snapshot = await getDocs(collection(db, "treasuryMovements"));
-  movementsCache = snapshot.docs.map(mapMovement).sort((a, b) => {
+export async function getTreasuryMovements({ account = "DEPOSIT", force = false } = {}) {
+  if (!force && movementsCache.has(account)) return movementsCache.get(account);
+  const snapshot = await getDocs(query(
+    collection(db, "treasuryMovements"),
+    where("account", "==", account)
+  ));
+  const items = snapshot.docs.map(mapMovement).sort((a, b) => {
     const dateDifference = (b.movementDate?.getTime() || 0) - (a.movementDate?.getTime() || 0);
     const importDifference = (b.importedAt?.seconds || 0) - (a.importedAt?.seconds || 0);
     return dateDifference || importDifference || (a.sourcePosition ?? 9999) - (b.sourcePosition ?? 9999) || a.id.localeCompare(b.id);
   });
-  return movementsCache;
+  movementsCache.set(account, items);
+  return items;
 }
 
 export function invalidateTreasuryMovementsCache() {
-  movementsCache = null;
+  movementsCache.clear();
 }
 
 export async function updateTreasuryMovementCategory(movementId, category) {

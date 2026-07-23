@@ -1,5 +1,8 @@
 const SHEETJS_MODULE_URL = "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
-const DEPOSIT_ACCOUNT_LAST4 = "0692";
+const ACCOUNTS = {
+  DEPOSIT: { last4: "0692" },
+  SL: { last4: "8899" }
+};
 const REQUIRED_HEADERS = ["Fecha", "Fecha valor", "Movimiento", "Más datos", "Importe", "Saldo"];
 
 let sheetJsPromise;
@@ -29,7 +32,7 @@ function isoDate(value, XLSX) {
   throw new Error("TREASURY_DATE_INVALID");
 }
 
-function classifyMovement(movement, moreData, amount) {
+function classifyDepositMovement(movement, moreData, amount) {
   const text = normalizeKey(`${movement} ${moreData}`);
   if (text.includes("traspaso")) return "UNCLASSIFIED";
   if (text.includes("interes") || text.includes("comision")) return "BANK_EXPENSE";
@@ -40,6 +43,23 @@ function classifyMovement(movement, moreData, amount) {
     return "DEPOSIT_CARD_PURCHASE";
   }
   return amount > 0 ? "POSSIBLE_CLIENT_PAYMENT" : "POSSIBLE_SUPPLIER_PAYMENT";
+}
+
+function classifySlMovement(movement, moreData, amount) {
+  const text = normalizeKey(`${movement} ${moreData}`);
+  if (text.includes("traspaso")) return "UNCLASSIFIED";
+  if (text.includes("airbnb")) return "SL_AIRBNB_INCOME";
+  if (text.includes("booking")) return "SL_BOOKING_INCOME";
+  if (text.includes("impuesto") || text.includes("tribut") || text.includes("irpf")) return "SL_TAX";
+  if (text.includes("nomina")) return "SL_PAYROLL";
+  if (text.includes("facebook") || text.includes("meta ")) return "SL_SUBSCRIPTION_SERVICE";
+  if (text.includes("interes") || text.includes("comision")) return "BANK_EXPENSE";
+  if (text.includes("fecha de operacion") || text.includes("t.plana")) return "SL_CARD_PURCHASE";
+  return "UNCLASSIFIED";
+}
+
+function accountFromDigits(accountDigits) {
+  return Object.entries(ACCOUNTS).find(([, account]) => accountDigits.endsWith(account.last4))?.[0] || null;
 }
 
 async function sha256(value) {
@@ -89,7 +109,9 @@ export async function parseTreasuryStatement(file) {
   const headingText = rows.slice(0, 3).flat().map(clean).join(" ");
   const accountMatch = headingText.match(/\bES\d{2}(?:\s*\d{4}){5}\b/i);
   const accountDigits = accountMatch?.[0]?.replace(/\s/g, "") || "";
-  if (!accountDigits.endsWith(DEPOSIT_ACCOUNT_LAST4)) throw new Error("TREASURY_ACCOUNT_INVALID");
+  const account = accountFromDigits(accountDigits);
+  if (!account) throw new Error("TREASURY_ACCOUNT_INVALID");
+  const accountLast4 = ACCOUNTS[account].last4;
 
   const headerIndex = findHeaderRow(rows);
   if (headerIndex < 0) throw new Error("TREASURY_HEADERS_INVALID");
@@ -108,13 +130,13 @@ export async function parseTreasuryStatement(file) {
       throw new Error("TREASURY_ROW_INVALID");
     }
     const fingerprintSource = [
-      "DEPOSIT", movementDate, valueDate, normalizeKey(bankMovement), normalizeKey(moreData),
+      account, movementDate, valueDate, normalizeKey(bankMovement), normalizeKey(moreData),
       cents(amount), cents(balance)
     ].join("|");
     movements.push({
       id: await sha256(fingerprintSource),
-      account: "DEPOSIT",
-      accountLast4: DEPOSIT_ACCOUNT_LAST4,
+      account,
+      accountLast4,
       movementDate,
       valueDate,
       bankMovement,
@@ -122,7 +144,9 @@ export async function parseTreasuryStatement(file) {
       amount: cents(amount) / 100,
       balance: cents(balance) / 100,
       direction: amount >= 0 ? "ENTRY" : "EXIT",
-      category: classifyMovement(bankMovement, moreData, amount),
+      category: account === "DEPOSIT"
+        ? classifyDepositMovement(bankMovement, moreData, amount)
+        : classifySlMovement(bankMovement, moreData, amount),
       reconciliationStatus: "PENDING",
       fingerprintVersion: 1,
       sourcePosition
@@ -132,8 +156,8 @@ export async function parseTreasuryStatement(file) {
   if (!movements.length) throw new Error("TREASURY_NO_MOVEMENTS");
   validateBalances(movements);
   return {
-    account: "DEPOSIT",
-    accountLast4: DEPOSIT_ACCOUNT_LAST4,
+    account,
+    accountLast4,
     fileName: file.name,
     movements,
     firstDate: movements[movements.length - 1].movementDate,
@@ -148,7 +172,8 @@ export function getTreasuryImportErrorMessage(error) {
     TREASURY_FILE_TYPE_INVALID: "El fitxer ha de ser un Excel .xls o .xlsx.",
     TREASURY_PARSER_UNAVAILABLE: "No s’ha pogut carregar el lector d’Excel. Comprova la connexió i torna-ho a provar.",
     TREASURY_SHEET_EMPTY: "L’Excel no conté cap pestanya amb moviments.",
-    TREASURY_ACCOUNT_INVALID: "Aquest extracte no correspon al compte de dipòsits acabat en 0692.",
+    TREASURY_ACCOUNT_INVALID: "Aquest extracte no correspon ni al compte de dipòsits acabat en 0692 ni al compte SL acabat en 8899.",
+    TREASURY_ACCOUNT_MISMATCH: "L’extracte correspon a un altre compte. Selecciona el compte correcte abans d’importar-lo.",
     TREASURY_HEADERS_INVALID: "No s’han trobat les columnes esperades de l’extracte bancari.",
     TREASURY_DATE_INVALID: "Hi ha una data que no es pot interpretar.",
     TREASURY_ROW_INVALID: "Hi ha una fila amb el moviment, l’import o el saldo incomplet.",

@@ -136,7 +136,11 @@ service cloud.firestore {
     match /treasuryMovements/{movementId} {
       allow read: if isStaff();
       allow create: if isAdmin()
-        && request.resource.data.account == "DEPOSIT"
+        && request.resource.data.account in ["DEPOSIT", "SL"]
+        && (
+          (request.resource.data.account == "DEPOSIT" && request.resource.data.accountLast4 == "0692")
+          || (request.resource.data.account == "SL" && request.resource.data.accountLast4 == "8899")
+        )
         && request.resource.data.amount is number
         && request.resource.data.balance is number
         && request.resource.data.movementDate is string
@@ -156,6 +160,16 @@ service cloud.firestore {
           "PAYMENT_GATEWAY",
           "PAYMENT_GATEWAY_REFUND",
           "DEPOSIT_CARD_PURCHASE",
+          "SL_RENTAL_INCOME",
+          "SL_AIRBNB_INCOME",
+          "SL_BOOKING_INCOME",
+          "SL_OWNER_PAYMENT",
+          "SL_COMPANY_EXPENSE",
+          "SL_TRAVEL_EXPENSE",
+          "SL_TAX",
+          "SL_PAYROLL",
+          "SL_CARD_PURCHASE",
+          "SL_SUBSCRIPTION_SERVICE",
           "REFUND",
           "OTHER"
         ]
