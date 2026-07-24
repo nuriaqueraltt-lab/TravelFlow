@@ -11,6 +11,7 @@ import { db } from "./firebase.service.js";
 const ANALYTICS_CACHE_TTL = 5 * 60 * 1000;
 const analyticsCache = new Map();
 const analyticsRequests = new Map();
+let analyticsCacheGeneration = 0;
 
 function mapDocument(snapshot) {
   return { id: snapshot.id, ...snapshot.data() };
@@ -28,6 +29,7 @@ function rangeKey(start, end) {
 }
 
 export function invalidateAnalyticsCache() {
+  analyticsCacheGeneration += 1;
   analyticsCache.clear();
   analyticsRequests.clear();
 }
@@ -42,6 +44,7 @@ export async function getAnalyticsLeads({ start, end, force = false } = {}) {
   if (!force && cached && Date.now() - cached.at < ANALYTICS_CACHE_TTL) return cached.items;
   if (!force && analyticsRequests.has(key)) return analyticsRequests.get(key);
 
+  const requestGeneration = analyticsCacheGeneration;
   const request = getDocs(query(
     collection(db, "leads"),
     where("createdAt", ">=", new Date(startMillis)),
@@ -49,10 +52,12 @@ export async function getAnalyticsLeads({ start, end, force = false } = {}) {
     orderBy("createdAt", "desc")
   )).then((snapshot) => {
     const items = snapshot.docs.map(mapDocument).filter((lead) => lead.active !== false);
-    analyticsCache.set(key, { items, at: Date.now() });
+    if (requestGeneration === analyticsCacheGeneration) {
+      analyticsCache.set(key, { items, at: Date.now() });
+    }
     return items;
   }).finally(() => {
-    analyticsRequests.delete(key);
+    if (analyticsRequests.get(key) === request) analyticsRequests.delete(key);
   });
 
   analyticsRequests.set(key, request);
