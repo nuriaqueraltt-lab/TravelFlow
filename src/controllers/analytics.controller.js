@@ -1,4 +1,4 @@
-import { getLeads, invalidateLeadsCache } from "../services/lead.service.js";
+import { getAnalyticsLeads, invalidateAnalyticsCache } from "../services/analytics.service.js";
 import { getTrips } from "../services/trip.service.js";
 import { getTripInterestStatus, isBookedForTrip } from "../services/trip-interest.model.js";
 
@@ -197,10 +197,51 @@ function filteredLeads(bounds = getDateBounds()) {
   });
 }
 
+function shiftMonth(date, amount) {
+  const value = new Date(date);
+  const day = value.getDate();
+  value.setDate(1);
+  value.setMonth(value.getMonth() + amount);
+  const lastDay = new Date(value.getFullYear(), value.getMonth() + 1, 0).getDate();
+  value.setDate(Math.min(day, lastDay));
+  return value;
+}
+
 function previousBounds(bounds) {
   if (analyticsState.range === "all") return null;
+  if (analyticsState.range === "today") {
+    return {
+      start: new Date(bounds.start.getTime() - 86400000),
+      end: new Date(bounds.end.getTime() - 86400000)
+    };
+  }
+  if (analyticsState.range === "week") {
+    return {
+      start: new Date(bounds.start.getTime() - 7 * 86400000),
+      end: new Date(bounds.end.getTime() - 7 * 86400000)
+    };
+  }
+  if (analyticsState.range === "month") {
+    return { start: shiftMonth(bounds.start, -1), end: shiftMonth(bounds.end, -1) };
+  }
+  if (analyticsState.range === "year") {
+    const start = new Date(bounds.start);
+    const end = new Date(bounds.end);
+    start.setFullYear(start.getFullYear() - 1);
+    end.setFullYear(end.getFullYear() - 1);
+    return { start, end };
+  }
   const duration = bounds.end.getTime() - bounds.start.getTime() + 1;
   return { start: new Date(bounds.start.getTime() - duration), end: new Date(bounds.start.getTime() - 1) };
+}
+
+function analyticsLoadBounds() {
+  const current = getDateBounds();
+  const previous = previousBounds(current);
+  return {
+    start: previous?.start || current.start,
+    end: current.end
+  };
 }
 
 function leadReachedStage(lead, stage) {
@@ -252,7 +293,7 @@ function aggregateTrips(leads) {
     const trip = tripMap.get(tripId);
     const bookings = tripLeads.filter((lead) => isBookedForTrip(lead, tripId)).length;
     const lost = tripLeads.filter((lead) => getTripInterestStatus(lead, tripId) === "LOST");
-    const reasons = [...groupBy(lost, (lead) => lead.lostReason || "OTHER").entries()]
+    const reasons = [...groupBy(lost, (lead) => lead.tripInterests?.[tripId]?.lostReason || lead.lostReason || "OTHER").entries()]
       .map(([reason, values]) => ({ reason, count: values.length }))
       .sort((a, b) => b.count - a.count);
     return {
@@ -519,10 +560,15 @@ export async function showAnalyticsView({ force = false } = {}) {
   const container = root();
   if (!container) return;
   setAnalyticsActive();
+  analyticsRefreshing = force;
   container.innerHTML = '<section class="analytics-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la lectura comercial...</p></div></section>';
   try {
-    if (force) invalidateLeadsCache();
-    const [leads, trips] = await Promise.all([getLeads(), getTrips()]);
+    if (force) invalidateAnalyticsCache();
+    const loadBounds = analyticsLoadBounds();
+    const [leads, trips] = await Promise.all([
+      getAnalyticsLeads({ ...loadBounds, force }),
+      getTrips()
+    ]);
     analyticsState.leads = leads;
     analyticsState.trips = trips;
     analyticsDirty = false;
@@ -552,12 +598,11 @@ function selectRadarTrip(row) {
 document.addEventListener("click", (event) => {
   if (event.target.closest('[data-nav-key="analytics"]')) showAnalyticsView();
   if (event.target.closest("[data-refresh-analytics]")) {
-    analyticsRefreshing = true;
     showAnalyticsView({ force: true });
   }
   if (event.target.closest("[data-analytics-reset]")) {
     analyticsState = { ...analyticsState, range: "month", startDate: "", endDate: "", tripId: "", source: "", status: "" };
-    rerenderAnalytics();
+    showAnalyticsView();
   }
   selectRadarTrip(event.target.closest("[data-analytics-trip-filter]"));
   const rangeButton = event.target.closest("[data-analytics-range]");
@@ -568,7 +613,7 @@ document.addEventListener("click", (event) => {
       analyticsState.startDate = localIso(defaults.start);
       analyticsState.endDate = localIso(defaults.end);
     }
-    rerenderAnalytics();
+    showAnalyticsView();
   }
 });
 
@@ -580,6 +625,14 @@ document.addEventListener("change", (event) => {
   const field = event.target.dataset.analyticsFilter;
   if (!field) return;
   analyticsState[field] = event.target.value;
+  if (["startDate", "endDate"].includes(field)) {
+    if (analyticsState.startDate && analyticsState.endDate && analyticsState.startDate <= analyticsState.endDate) {
+      showAnalyticsView();
+    } else {
+      rerenderAnalytics();
+    }
+    return;
+  }
   rerenderAnalytics();
 });
 
