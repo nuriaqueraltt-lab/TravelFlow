@@ -59,6 +59,7 @@ let analyticsState = {
 let analyticsDirty = false;
 let analyticsRefreshing = false;
 let analyticsUpdatedAt = null;
+let analyticsLoadToken = 0;
 
 function root() {
   return document.querySelector(".app-content");
@@ -559,6 +560,7 @@ function setAnalyticsActive() {
 export async function showAnalyticsView({ force = false } = {}) {
   const container = root();
   if (!container) return;
+  const loadToken = ++analyticsLoadToken;
   setAnalyticsActive();
   analyticsRefreshing = force;
   container.innerHTML = '<section class="analytics-page"><div class="leads-loading"><span class="leads-loading__spinner"></span><p>Preparant la lectura comercial...</p></div></section>';
@@ -569,6 +571,7 @@ export async function showAnalyticsView({ force = false } = {}) {
       getAnalyticsLeads({ ...loadBounds, force }),
       getTrips()
     ]);
+    if (loadToken !== analyticsLoadToken) return;
     analyticsState.leads = leads;
     analyticsState.trips = trips;
     analyticsDirty = false;
@@ -576,10 +579,11 @@ export async function showAnalyticsView({ force = false } = {}) {
     analyticsRefreshing = false;
     container.innerHTML = renderAnalytics();
   } catch (error) {
+    if (loadToken !== analyticsLoadToken) return;
     console.error("No s'ha pogut carregar l'analítica comercial:", error);
     container.innerHTML = '<div class="leads-error">No s’ha pogut carregar l’Analítica Comercial.</div>';
   } finally {
-    analyticsRefreshing = false;
+    if (loadToken === analyticsLoadToken) analyticsRefreshing = false;
   }
 }
 
