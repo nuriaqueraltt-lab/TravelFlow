@@ -30,6 +30,93 @@ function formatPercent(value) { return `${new Intl.NumberFormat("ca-ES", { maxim
 function formatMoney(value) { return new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value) || 0); }
 function formatDate(value) { const date = toDate(value); return date ? new Intl.DateTimeFormat("ca-ES", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date) : "—"; }
 
+const PDF_LIBRARY_URL = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+let pdfLibraryPromise = null;
+
+function loadPdfLibrary() {
+  if (typeof window.html2pdf === "function") return Promise.resolve(window.html2pdf);
+  if (pdfLibraryPromise) return pdfLibraryPromise;
+
+  pdfLibraryPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector("script[data-travelflow-pdf]");
+    const script = existing || document.createElement("script");
+    const finish = () => typeof window.html2pdf === "function"
+      ? resolve(window.html2pdf)
+      : reject(new Error("PDF_LIBRARY_UNAVAILABLE"));
+
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", () => reject(new Error("PDF_LIBRARY_LOAD_FAILED")), { once: true });
+
+    if (!existing) {
+      script.src = PDF_LIBRARY_URL;
+      script.async = true;
+      script.dataset.travelflowPdf = "true";
+      document.head.appendChild(script);
+    }
+  }).catch((error) => {
+    pdfLibraryPromise = null;
+    throw error;
+  });
+
+  return pdfLibraryPromise;
+}
+
+function pdfFileName() {
+  const bounds = currentBounds();
+  return `informe-google-ads-${localIso(bounds.start)}-${localIso(bounds.end)}.pdf`;
+}
+
+async function downloadReportPdf(button) {
+  const report = root()?.querySelector(".ga-report-page");
+  if (!report) return;
+
+  const originalLabel = button?.textContent || "Descarregar PDF";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Generant PDF…";
+  }
+
+  const exportContainer = document.createElement("div");
+  const reportClone = report.cloneNode(true);
+  reportClone.querySelectorAll(".no-print").forEach((element) => element.remove());
+  Object.assign(exportContainer.style, {
+    position: "fixed",
+    left: "-100000px",
+    top: "0",
+    width: "1120px",
+    padding: "18px",
+    background: "#ffffff",
+    zIndex: "-1"
+  });
+  exportContainer.appendChild(reportClone);
+  document.body.appendChild(exportContainer);
+
+  try {
+    const html2pdf = await loadPdfLibrary();
+    await html2pdf().set({
+      margin: [8, 8, 8, 8],
+      filename: pdfFileName(),
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 1.5, useCORS: true, backgroundColor: "#ffffff", logging: false },
+      jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      pagebreak: {
+        mode: ["css", "legacy"],
+        avoid: [".ga-report-card", ".ga-report-metric", ".ga-report-insights"]
+      }
+    }).from(reportClone).save();
+  } catch (error) {
+    console.error("No s'ha pogut descarregar el PDF directament:", error);
+    window.print();
+    window.alert("No s’ha pogut crear la descàrrega directa. S’ha obert la impressió perquè puguis triar PDF → Desa com a PDF.");
+  } finally {
+    exportContainer.remove();
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
+}
+
 function presetBounds(range) {
   const now = new Date();
   const end = endOfDay(now);
@@ -231,7 +318,7 @@ function renderReport() {
   const campaigns = aggregateCampaigns(leads);
   const dateLabel = `${formatDate(bounds.start)} — ${formatDate(bounds.end)}`;
   const freshness = reportState.updatedAt ? `Actualitzat a les ${reportState.updatedAt.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}` : "";
-  return `<section class="ga-report-page"><header class="ga-report-hero"><div><button type="button" class="ga-report-back no-print" data-back-commercial-analytics>← Tornar a Analítica</button><span class="section-kicker">Informe comercial · Google Ads</span><h1>Qualitat i conversió dels leads</h1><p>${dateLabel} · Resultats basats exclusivament en els leads registrats a TravelFlow.</p></div><aside class="no-print"><button type="button" data-ga-refresh>Actualitzar</button><button type="button" class="is-primary" data-ga-print>Imprimir / desar PDF</button><small>${freshness}</small></aside></header>${renderFilters()}<section class="ga-report-metrics">${metric("Leads", leads.length, previous ? `${previousLeads.length} al període anterior` : "Període complet", "brand")}${metric("Oportunitats actives", active, "Encara poden avançar")}${metric("Reserves actives", bookings, `${formatMoney(value)} de valor`, "success")}${metric("Conversions", conversions, "Inclou cancel·lacions posteriors")}${metric("Perduts", lost, `${formatPercent(percent(lost, leads.length))} del total`, lost ? "warning" : "")}${metric("Conversió", formatPercent(conversion), previous ? `${conversion - priorConversion >= 0 ? "+" : ""}${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(conversion - priorConversion)} punts` : "Sense comparativa", "dark")}</section>${renderInsights(leads, trips)}<section class="ga-report-two">${renderMethodComparison(leads)}${renderFollowUp(leads)}</section>${renderTrips(trips)}${renderCampaigns(campaigns, formLeads)}${renderAdDetails(formLeads)}${renderDataQuality(leads)}<section class="ga-report-two">${renderLosses(leads)}<article class="ga-report-card"><header><div><span class="section-kicker">Estat actual</span><h2>Distribució comercial</h2></div></header><div class="ga-ranking">${Object.entries(STATUS_LABELS).map(([key, label]) => { const count = leads.filter((lead) => statusFor(lead) === key).length; return count ? `<div><span><strong>${label}</strong></span><b>${count}</b></div>` : ""; }).join("") || "<p>Sense dades.</p>"}</div></article></section><footer class="ga-report-footer">TravelFlow · Dones i Viatgeres · Informe generat el ${new Intl.DateTimeFormat("ca-ES", { dateStyle: "long" }).format(new Date())}</footer></section>`;
+  return `<section class="ga-report-page"><header class="ga-report-hero"><div><button type="button" class="ga-report-back no-print" data-back-commercial-analytics>← Tornar a Analítica</button><span class="section-kicker">Informe comercial · Google Ads</span><h1>Qualitat i conversió dels leads</h1><p>${dateLabel} · Resultats basats exclusivament en els leads registrats a TravelFlow.</p></div><aside class="no-print"><button type="button" data-ga-refresh>Actualitzar</button><button type="button" class="is-primary" data-ga-download-pdf>Descarregar PDF</button><small>${freshness}</small></aside></header>${renderFilters()}<section class="ga-report-metrics">${metric("Leads", leads.length, previous ? `${previousLeads.length} al període anterior` : "Període complet", "brand")}${metric("Oportunitats actives", active, "Encara poden avançar")}${metric("Reserves actives", bookings, `${formatMoney(value)} de valor`, "success")}${metric("Conversions", conversions, "Inclou cancel·lacions posteriors")}${metric("Perduts", lost, `${formatPercent(percent(lost, leads.length))} del total`, lost ? "warning" : "")}${metric("Conversió", formatPercent(conversion), previous ? `${conversion - priorConversion >= 0 ? "+" : ""}${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(conversion - priorConversion)} punts` : "Sense comparativa", "dark")}</section>${renderInsights(leads, trips)}<section class="ga-report-two">${renderMethodComparison(leads)}${renderFollowUp(leads)}</section>${renderTrips(trips)}${renderCampaigns(campaigns, formLeads)}${renderAdDetails(formLeads)}${renderDataQuality(leads)}<section class="ga-report-two">${renderLosses(leads)}<article class="ga-report-card"><header><div><span class="section-kicker">Estat actual</span><h2>Distribució comercial</h2></div></header><div class="ga-ranking">${Object.entries(STATUS_LABELS).map(([key, label]) => { const count = leads.filter((lead) => statusFor(lead) === key).length; return count ? `<div><span><strong>${label}</strong></span><b>${count}</b></div>` : ""; }).join("") || "<p>Sense dades.</p>"}</div></article></section><footer class="ga-report-footer">TravelFlow · Dones i Viatgeres · Informe generat el ${new Intl.DateTimeFormat("ca-ES", { dateStyle: "long" }).format(new Date())}</footer></section>`;
 }
 
 async function loadReport({ force = false } = {}) {
@@ -262,7 +349,8 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-open-google-ads-report]")) loadReport();
   if (event.target.closest("[data-back-commercial-analytics]")) showAnalyticsView();
   if (event.target.closest("[data-ga-refresh]")) loadReport({ force: true });
-  if (event.target.closest("[data-ga-print]")) window.print();
+  const pdfButton = event.target.closest("[data-ga-download-pdf]");
+  if (pdfButton) void downloadReportPdf(pdfButton);
   if (event.target.closest("[data-ga-reset]")) { reportState = { ...reportState, range: "month", startDate: "", endDate: "", method: "", tripId: "", campaignId: "" }; loadReport(); }
   const range = event.target.closest("[data-ga-range]");
   if (range) {
