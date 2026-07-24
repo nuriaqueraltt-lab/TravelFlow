@@ -142,6 +142,44 @@ function renderCampaigns(rows, formLeads) {
   return `<section class="ga-report-two"><article class="ga-report-card"><header><div><span class="section-kicker">Formularis</span><h2>Campanyes identificades</h2></div><span>${attributed} de ${formLeads.length} atribuïts</span></header><div class="ga-ranking">${rows.length ? rows.slice(0, 8).map((row) => `<div><span><strong>${esc(row.label)}</strong><small>${row.leads} leads · ${row.bookings} reserves · ${row.lost} perduts</small></span><b>${formatPercent(row.conversion)}</b></div>`).join("") : '<p>No hi ha formularis en aquest període.</p>'}</div></article><article class="ga-report-card"><header><div><span class="section-kicker">Cerca</span><h2>Temes de cerca</h2></div></header><div class="ga-ranking">${themes.length ? themes.map((row) => `<div><span><strong>${esc(row.label)}</strong><small>${row.bookings} reserves</small></span><b>${row.count}</b></div>`).join("") : '<p>No hi ha temes de cerca registrats.</p>'}</div></article></section>`;
 }
 
+
+function renderAdDetails(formLeads) {
+  const aggregate = (field, emptyLabel) => [...groupBy(formLeads, (lead) => lead[field] || emptyLabel).entries()]
+    .map(([label, values]) => ({ label, leads: values.length, bookings: values.filter((lead) => isBooked(lead)).length, lost: values.filter((lead) => isLost(lead)).length }))
+    .sort((a, b) => b.leads - a.leads)
+    .slice(0, 10);
+  const groups = aggregate("googleAdsAdGroupId", "Sense grup identificat");
+  const ads = aggregate("googleAdsAdId", "Sense anunci identificat");
+  const renderRows = (rows) => rows.length
+    ? rows.map((row) => '<div><span><strong>' + esc(row.label) + '</strong><small>' + row.bookings + ' reserves · ' + row.lost + ' perduts</small></span><b>' + row.leads + '</b></div>').join("")
+    : "<p>No hi ha dades registrades.</p>";
+  return '<section class="ga-report-two"><article class="ga-report-card"><header><div><span class="section-kicker">Formularis</span><h2>Grups d’anuncis</h2></div></header><div class="ga-ranking">' + renderRows(groups) + '</div></article><article class="ga-report-card"><header><div><span class="section-kicker">Formularis</span><h2>Anuncis</h2></div></header><div class="ga-ranking">' + renderRows(ads) + '</div></article></section>';
+}
+
+function renderDataQuality(leads) {
+  const withPhone = leads.filter((lead) => Boolean(lead.phoneNormalized || lead.phone)).length;
+  const withEmail = leads.filter((lead) => Boolean(lead.email)).length;
+  const withoutContact = leads.filter((lead) => !lead.phoneNormalized && !lead.phone && !lead.email).length;
+  const duplicateKeys = new Map();
+  leads.forEach((lead) => {
+    const keys = [lead.phoneNormalized, lead.email?.toLowerCase()].filter(Boolean);
+    keys.forEach((key) => duplicateKeys.set(key, (duplicateKeys.get(key) || 0) + 1));
+  });
+  const possibleDuplicates = leads.filter((lead) => [lead.phoneNormalized, lead.email?.toLowerCase()].filter(Boolean).some((key) => (duplicateKeys.get(key) || 0) > 1)).length;
+  const bookingDays = leads.map((lead) => {
+    const booked = reportState.tripId ? toDate(lead.tripInterests?.[reportState.tripId]?.bookedAt) : toDate(lead.bookedAt);
+    const created = toDate(lead.createdAt);
+    return booked && created ? Math.max(0, (booked - created) / 86400000) : null;
+  }).filter((value) => value != null);
+  const lostDays = leads.map((lead) => {
+    const lostAt = toDate(lead.lostAt);
+    const created = toDate(lead.createdAt);
+    return lostAt && created ? Math.max(0, (lostAt - created) / 86400000) : null;
+  }).filter((value) => value != null);
+  const average = (values) => values.length ? new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(values.reduce((sum, value) => sum + value, 0) / values.length) + " dies" : "—";
+  return '<article class="ga-report-card ga-report-wide"><header><div><span class="section-kicker">Dades i velocitat</span><h2>Qualitat del registre</h2></div></header><div class="ga-follow-grid"><div><strong>' + withPhone + '</strong><span>amb telèfon</span></div><div><strong>' + withEmail + '</strong><span>amb correu</span></div><div><strong>' + withoutContact + '</strong><span>sense telèfon ni correu</span></div><div><strong>' + possibleDuplicates + '</strong><span>possibles duplicats</span></div><div><strong>' + average(bookingDays) + '</strong><span>temps mitjà fins a reserva</span></div><div><strong>' + average(lostDays) + '</strong><span>temps mitjà fins a pèrdua</span></div></div></article>';
+}
+
 function renderLosses(leads) {
   const lost = leads.filter((lead) => isLost(lead));
   const rows = [...groupBy(lost, (lead) => lostReason(lead)).entries()].map(([key, values]) => ({ label: LOST_LABELS[key] || "Altres", count: values.length, share: percent(values.length, lost.length) })).sort((a, b) => b.count - a.count);
@@ -193,7 +231,7 @@ function renderReport() {
   const campaigns = aggregateCampaigns(leads);
   const dateLabel = `${formatDate(bounds.start)} — ${formatDate(bounds.end)}`;
   const freshness = reportState.updatedAt ? `Actualitzat a les ${reportState.updatedAt.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}` : "";
-  return `<section class="ga-report-page"><header class="ga-report-hero"><div><button type="button" class="ga-report-back no-print" data-back-commercial-analytics>← Tornar a Analítica</button><span class="section-kicker">Informe comercial · Google Ads</span><h1>Qualitat i conversió dels leads</h1><p>${dateLabel} · Resultats basats exclusivament en els leads registrats a TravelFlow.</p></div><aside class="no-print"><button type="button" data-ga-refresh>Actualitzar</button><button type="button" class="is-primary" data-ga-print>Imprimir / desar PDF</button><small>${freshness}</small></aside></header>${renderFilters()}<section class="ga-report-metrics">${metric("Leads", leads.length, previous ? `${previousLeads.length} al període anterior` : "Període complet", "brand")}${metric("Oportunitats actives", active, "Encara poden avançar")}${metric("Reserves actives", bookings, `${formatMoney(value)} de valor`, "success")}${metric("Conversions", conversions, "Inclou cancel·lacions posteriors")}${metric("Perduts", lost, `${formatPercent(percent(lost, leads.length))} del total`, lost ? "warning" : "")}${metric("Conversió", formatPercent(conversion), previous ? `${conversion - priorConversion >= 0 ? "+" : ""}${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(conversion - priorConversion)} punts` : "Sense comparativa", "dark")}</section>${renderInsights(leads, trips)}<section class="ga-report-two">${renderMethodComparison(leads)}${renderFollowUp(leads)}</section>${renderTrips(trips)}${renderCampaigns(campaigns, formLeads)}<section class="ga-report-two">${renderLosses(leads)}<article class="ga-report-card"><header><div><span class="section-kicker">Estat actual</span><h2>Distribució comercial</h2></div></header><div class="ga-ranking">${Object.entries(STATUS_LABELS).map(([key, label]) => { const count = leads.filter((lead) => statusFor(lead) === key).length; return count ? `<div><span><strong>${label}</strong></span><b>${count}</b></div>` : ""; }).join("") || "<p>Sense dades.</p>"}</div></article></section><footer class="ga-report-footer">TravelFlow · Dones i Viatgeres · Informe generat el ${new Intl.DateTimeFormat("ca-ES", { dateStyle: "long" }).format(new Date())}</footer></section>`;
+  return `<section class="ga-report-page"><header class="ga-report-hero"><div><button type="button" class="ga-report-back no-print" data-back-commercial-analytics>← Tornar a Analítica</button><span class="section-kicker">Informe comercial · Google Ads</span><h1>Qualitat i conversió dels leads</h1><p>${dateLabel} · Resultats basats exclusivament en els leads registrats a TravelFlow.</p></div><aside class="no-print"><button type="button" data-ga-refresh>Actualitzar</button><button type="button" class="is-primary" data-ga-print>Imprimir / desar PDF</button><small>${freshness}</small></aside></header>${renderFilters()}<section class="ga-report-metrics">${metric("Leads", leads.length, previous ? `${previousLeads.length} al període anterior` : "Període complet", "brand")}${metric("Oportunitats actives", active, "Encara poden avançar")}${metric("Reserves actives", bookings, `${formatMoney(value)} de valor`, "success")}${metric("Conversions", conversions, "Inclou cancel·lacions posteriors")}${metric("Perduts", lost, `${formatPercent(percent(lost, leads.length))} del total`, lost ? "warning" : "")}${metric("Conversió", formatPercent(conversion), previous ? `${conversion - priorConversion >= 0 ? "+" : ""}${new Intl.NumberFormat("ca-ES", { maximumFractionDigits: 1 }).format(conversion - priorConversion)} punts` : "Sense comparativa", "dark")}</section>${renderInsights(leads, trips)}<section class="ga-report-two">${renderMethodComparison(leads)}${renderFollowUp(leads)}</section>${renderTrips(trips)}${renderCampaigns(campaigns, formLeads)}${renderAdDetails(formLeads)}${renderDataQuality(leads)}<section class="ga-report-two">${renderLosses(leads)}<article class="ga-report-card"><header><div><span class="section-kicker">Estat actual</span><h2>Distribució comercial</h2></div></header><div class="ga-ranking">${Object.entries(STATUS_LABELS).map(([key, label]) => { const count = leads.filter((lead) => statusFor(lead) === key).length; return count ? `<div><span><strong>${label}</strong></span><b>${count}</b></div>` : ""; }).join("") || "<p>Sense dades.</p>"}</div></article></section><footer class="ga-report-footer">TravelFlow · Dones i Viatgeres · Informe generat el ${new Intl.DateTimeFormat("ca-ES", { dateStyle: "long" }).format(new Date())}</footer></section>`;
 }
 
 async function loadReport({ force = false } = {}) {
